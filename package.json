@@ -1,0 +1,19 @@
+{
+  "name": "go-sqlite-js",
+  "version": "0.1.0",
+  "description": "go SQL driver for sql.js from go-wasm",
+  "main": "js/index.js",
+  "scripts": {
+    "build": "webpack",
+    "start": "webpack-dev-server"
+  },
+  "license": "Apache 2.0",
+  "devDependencies": {
+    "webpack": "^4.41.5",
+    "webpack-cli": "^3.3.10",
+    "webpack-dev-server": "^3.10.1"
+  },
+  "dependencies": {
+    "sql.js": "^1.1.0"
+  }
+}
