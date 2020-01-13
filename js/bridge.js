@@ -19,11 +19,16 @@ initSqlJs().then(SQL => {
 
     global.bridge = {
         open: (dsn) => {
-            return new SQL.Database();
+            return new SQL.Database()
         },
-        exec: (db, ...args) => {
-            return db.exec("SELECT * FROM hello");
+        exec: (db, query, ...args) => {
+            return db.exec(query);
         },
+        prepare: (db, query) => {
+            return db.prepare(query);
+        },
+        
+
     }
 
 });

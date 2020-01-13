@@ -15,9 +15,8 @@
 
 package main
 
-import "fmt"
+import "database/sql"
 import "log"
-import "sql"
 
 var c chan struct{}
 

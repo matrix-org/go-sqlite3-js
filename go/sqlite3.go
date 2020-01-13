@@ -13,7 +13,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Inspired by https://github.com/mattn/go-sqlite3
+
+package main
+
+import "database/sql"
+import "database/sql/driver"
 import "syscall/js"
+import "context"
 
 func init() {
 	sql.Register("sqlite-js", &SqliteJsDriver{})
@@ -26,8 +33,7 @@ type SqliteJsDriver struct {
 
 // SqliteJsConn implements driver.Conn.
 type SqliteJsConn struct {
-	js.Value JsDb
-
+	JsDb js.Value
 }
 
 // SqliteJsTx implements driver.Tx.
@@ -38,6 +44,7 @@ type SqliteJsTx struct {
 // SqliteJsStmt implements driver.Stmt.
 type SqliteJsStmt struct {
 	c      *SqliteJsConn
+	js     js.Value
 	t      string
 	closed bool
 	cls    bool
@@ -45,6 +52,7 @@ type SqliteJsStmt struct {
 
 // SqliteJsResult implements sql.Result.
 type SqliteJsResult struct {
+	js      js.Value
 	id      int64
 	changes int64
 }
@@ -61,118 +69,195 @@ type SqliteJsRows struct {
 }
 
 // Database conns
-func (d *SQLiteDriver) Open(dsn string) (driver.Conn, error) {
+func (d *SqliteJsDriver) Open(dsn string) (driver.Conn, error) {
 	bridge := js.Global().Get("bridge")
-	jsDb = bridge.Call("open", dsn)
-	return SqliteJsConn{jsDb}, nil
+	jsDb := bridge.Call("open", dsn)
+	return &SqliteJsConn{jsDb}, nil
 }
 
-/*
-Exec executes a query without returning any rows. The args are for any
-placeholder parameters in the query.
-*/
+
+// Exec executes a query without returning any rows. The args are for any
+// placeholder parameters in the query.
 func (conn *SqliteJsConn) Exec(query string, args ...interface{}) (driver.Result, error) {
 	bridge := js.Global().Get("bridge")
-	bridge.Call("exec", conn.JsDb, query, args)
-	return driver.Result{}, nil
+	res := bridge.Call("exec", conn.JsDb, query, args)
+	return &SqliteJsResult{js: res}, nil
 }
 
 
 // Transactions
 
-/*
-Begin starts a transaction. The default isolation level is dependent on the driver.
-*/
-func (conn *SqliteJsConn) Begin() (*driver.Tx, error)
 
-/*
-BeginTx starts a transaction.
+// Begin starts a transaction. The default isolation level is dependent on the driver.
+func (conn *SqliteJsConn) Begin() (driver.Tx, error) {
+	return nil, nil
+}
 
-The provided context is used until the transaction is committed or rolled
-back. If the context is canceled, the sql package will roll back the
-transaction. Tx.Commit will return an error if the context provided to BeginTx
-is canceled.
+// BeginTx starts and returns a new transaction.
+// If the context is canceled by the user the sql package will
+// call Tx.Rollback before discarding and closing the connection.
+//
+// This must check opts.Isolation to determine if there is a set
+// isolation level. If the driver does not support a non-default
+// level and one is set or if there is a non-default isolation level
+// that is not supported, an error must be returned.
+//
+// This must also check opts.ReadOnly to determine if the read-only
+// value is true to either set the read-only transaction property if supported
+// or return an error if it is not supported.
+func (conn *SqliteJsConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
+	return nil, nil
+}
 
-The provided TxOptions is optional and may be nil if defaults should be used.
-If a non-default isolation level is used that the driver doesn't support, an
-error will be returned.
-*/
-func (conn *SqliteJsConn) BeginTx(ctx context.Context, opts *driver.TxOptions) (*driver.Tx, error)
+// Close returns the connection to the connection pool. All operations after a
+// Close will return with ErrConnDone. Close is safe to call concurrently with
+// other operations and will block until all other operations finish. It may be
+// useful to first cancel any used context and then call close directly after.
+func (conn SqliteJsConn) Close() error {
+	return nil
+}
 
-/*
-Commit commits the transaction.
-*/
-func (tx *SqliteJsTx) Commit() error
+// Commit commits the transaction.
+func (tx *SqliteJsTx) Commit() error {
+	return nil
+}
 
-/*
-Rollback aborts the transaction.
-*/
-func (tx *SqliteJsTx) Rollback() error
-
-/*
-Stmt returns a transaction-specific prepared statement from an existing statement.
-*/
-func (tx *SqliteJsTx) Stmt(stmt *driver.Stmt) *driver.Stmt
+// Rollback aborts the transaction.
+func (tx *SqliteJsTx) Rollback() error {
+	return nil
+}
 
 
 // Statements
 
-/*
-Prepare creates a prepared statement for later queries or executions. Multiple
-queries or executions may be run concurrently from the returned statement. The
-caller must call the statement's Close method when the statement is no longer
-needed.
-*/
-func (conn *SqliteJsConn) Prepare(query string) (*driver.Stmt, error)
 
-/*
-ExecContext executes a prepared statement with the given arguments and returns
-a Result summarizing the effect of the statement. 
-*/
-func (s *SqliteJsStmt) ExecContext(ctx context.Context, args ...interface{}) (driver.Result, error)
+// Prepare creates a prepared statement for later queries or executions. Multiple
+// queries or executions may be run concurrently from the returned statement. The
+// caller must call the statement's Close method when the statement is no longer
+// needed.
+func (conn *SqliteJsConn) Prepare(query string) (driver.Stmt, error) {
+	bridge := js.Global().Get("bridge")
+	jsStmt := bridge.Call("exec", conn.JsDb, query)
+	return &SqliteJsStmt{
+		c: conn,
+		js: jsStmt,
+	}, nil
+}
 
-/*
-QueryContext executes a prepared query statement with the given arguments and
-returns the query results as a *Rows. 
-*/
-func (s *SqliteJsStmt) QueryContext(ctx context.Context, args ...interface{}) (*driver.Rows, error)
+type namedValue struct {
+	Name    string
+	Ordinal int
+	Value   driver.Value
+}
 
-/*
-QueryRowContext executes a prepared query statement with the given arguments.
-If an error occurs during the execution of the statement, that error will be
-returned by a call to Scan on the returned *Row, which is always non-nil. If
-the query selects no rows, the *Row's Scan will return ErrNoRows. Otherwise,
-the *Row's Scan scans the first selected row and discards the rest.
-*/
-func (s *SqliteJsStmt) QueryRowContext(ctx context.Context, args ...interface{}) *driver.Row
+// Exec executes a prepared statement with the given arguments and returns a
+// Result summarizing the effect of the statement. 
+func (s *SqliteJsStmt) Exec(args []driver.Value) (driver.Result, error) {
+	list := make([]namedValue, len(args))
+	for i, v := range args {
+		list[i] = namedValue{
+			Ordinal: i + 1,
+			Value:   v,
+		}
+	}
+	return s.exec(context.Background(), list)
+}
 
+// ExecContext executes a query that doesn't return rows, such
+// as an INSERT or UPDATE.
+//
+// ExecContext must honor the context timeout and return when it is canceled.
+func (s *SqliteJsStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
+	list := make([]namedValue, len(args))
+	for i, nv := range args {
+		list[i] = namedValue(nv)
+	}
+	return s.exec(ctx, list)
+}
+
+func (s *SqliteJsStmt) exec(ctx context.Context, args []namedValue) (driver.Result, error) {
+	bridge := js.Global().Get("bridge")
+	res := bridge.Call("exec", s.c.JsDb, args[0].Value)
+	return &SqliteJsResult{js: res}, nil
+}
+
+
+// Query executes a query that may return rows, such as a
+// SELECT.
+//
+// Deprecated: Drivers should implement StmtQueryContext instead (or additionally).
+func (s *SqliteJsStmt) Query(args []driver.Value) (driver.Rows, error) {
+	list := make([]namedValue, len(args))
+	for i, v := range args {
+		list[i] = namedValue{
+			Ordinal: i + 1,
+			Value:   v,
+		}
+	}
+	return s.query(context.Background(), list)
+}
+
+// QueryContext executes a query that may return rows, such as a
+// SELECT.
+//
+// QueryContext must honor the context timeout and return when it is canceled.
+func (s *SqliteJsStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
+	list := make([]namedValue, len(args))
+	for i, nv := range args {
+		list[i] = namedValue(nv)
+	}
+	return s.query(ctx, list)
+}
+
+func (s *SqliteJsStmt) query(ctx context.Context, args []namedValue) (driver.Rows, error) {
+	return nil, nil
+}
+
+// NumInput returns the number of placeholder parameters.
+//
+// If NumInput returns >= 0, the sql package will sanity check
+// argument counts from callers and return errors to the caller
+// before the statement's Exec or Query methods are called.
+//
+// NumInput may also return -1, if the driver doesn't know
+// its number of placeholders. In that case, the sql package
+// will not sanity check Exec or Query argument counts.
+func (s *SqliteJsStmt) NumInput() int {
+	return -1
+}
+
+
+// Close closes the statement.
+func (s *SqliteJsStmt) Close() error {
+	return nil
+}
 
 // Rows
 
-/*
-Scan copies the columns in the current row into the values pointed at by dest.
-The number of values in dest must be the same as the number of columns in
-Rows.
-*/
-func (rs *SqliteJsRows) Scan(dest ...interface{}) error
+// Scan copies the columns in the current row into the values pointed at by dest.
+// The number of values in dest must be the same as the number of columns in
+// Rows.
+func (rs *SqliteJsRows) Scan(dest ...interface{}) error {
+	return nil
+}
 
-/*
-Next prepares the next result row for reading with the Scan method. It returns
-true on success, or false if there is no next result row or an error happened
-while preparing it. Err should be consulted to distinguish between the two
-cases.
+// Next prepares the next result row for reading with the Scan method. It returns
+// true on success, or false if there is no next result row or an error happened
+// while preparing it. Err should be consulted to distinguish between the two
+// cases.
+//
+// Every call to Scan, even the first one, must be preceded by a call to Next.
+func (rs *SqliteJsRows) Next() bool {
+	return false
+}
 
-Every call to Scan, even the first one, must be preceded by a call to Next.
-*/
-func (rs *SqliteJsRows) Next() bool
-
-/*
-Close closes the Rows, preventing further enumeration. If Next is called and
-returns false and there are no further result sets, the Rows are closed
-automatically and it will suffice to check the result of Err. Close is
-idempotent and does not affect the result of Err. 
-*/
-func (rs *SqliteJsRows) Close() error
+// Close closes the Rows, preventing further enumeration. If Next is called and
+// returns false and there are no further result sets, the Rows are closed
+// automatically and it will suffice to check the result of Err. Close is
+// idempotent and does not affect the result of Err. 
+func (rs *SqliteJsRows) Close() error {
+	return nil
+}
 
 
 // Results
