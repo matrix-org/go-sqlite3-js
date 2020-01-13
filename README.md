@@ -2,7 +2,7 @@
 
 Experimental SQL driver for sql.js (in-browser sqlite) from Go WASM.
 
-Only implements the subset of the SQL API required by Dednrite.
+Only implements the subset of the SQL API required by Dendrite.
 
 To run:
 
