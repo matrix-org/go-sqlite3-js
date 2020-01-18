@@ -41,16 +41,38 @@ func main() {
         log.Fatal(err)
     }
 
-    var id int
-    var stmt *sql.Stmt
-    if stmt, err = db.Prepare("select * from foo"); err != nil {
+    _, err = db.Exec("insert into foo values(?)", 31337)
+    if err != nil {
         log.Fatal(err)
     }
 
+    var stmt *sql.Stmt
+    if stmt, err = db.Prepare("insert into foo values(?)"); err != nil {
+        log.Fatal(err)
+    }
+    stmt.Exec(12345678)
+
+    if stmt, err = db.Prepare("select * from foo"); err != nil {
+        log.Fatal(err)
+    }
+    var id int
     stmt.QueryRow().Scan(&id)
+    log.Printf("Got first id: %d", id)
+    stmt.Close()
 
-    log.Printf("Got id %d", id)
-
+    rows, err := db.Query("select * from foo")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer rows.Close()
+    for rows.Next() {
+        err := rows.Scan(&id)
+        if err != nil {
+            log.Fatal(err)
+        }
+        log.Printf("Got id: %d", id)
+    }
+    
     <-c
 }
 

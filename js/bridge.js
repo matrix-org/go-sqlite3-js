@@ -18,13 +18,16 @@ import initSqlJs from 'sql.js'
 
 initSqlJs().then(SQL => {
 
+    global.sqlite_dbs = {}
+
     // exposes sql.js's API in a shape that looks more like a go sql driver.
     // the datatype conversions however happens on the go side, rather than here.
     global.bridge = {
         open: (dsn) => {
             console.log(`opening db ${dsn}`)
-            global.db = new SQL.Database()
-            return global.db
+            const db = new SQL.Database()
+            global.sqlite_dbs[dsn] = new SQL.Database()
+            return db
         },
         prepare: (db, query) => {
             console.log(`preparing query: ${query}`)
@@ -40,15 +43,24 @@ initSqlJs().then(SQL => {
             console.log(`querying statement ${stmt.jb} with '${args}'`)
             const res = stmt.bind(args)
             if (!res) return res
-            return stmt.step()
+            // FIXME: storing random state on stmt is horrific
+            stmt._has_next = stmt.step()
+            return stmt._has_next
         },
         columns: (stmt) => {
             console.log(`getting columns as '${stmt.getColumnNames()}' from statement ${stmt.jb}`)
             return stmt.getColumnNames()
         },
         next: (stmt) => {
-            console.log(`getting row from statement ${stmt.jb}`)
-            return stmt.get()
+            if (stmt._has_next) {
+                console.log(`getting row from statement ${stmt.jb}`)
+                const rows = stmt.get()
+                stmt._has_next = stmt.step()
+                return rows
+            }
+            else {
+                return null
+            }
         },
         close: (stmt) => {
             console.log(`freeing statement ${stmt.jb}`)
