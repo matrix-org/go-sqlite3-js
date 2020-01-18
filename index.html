@@ -18,13 +18,7 @@ limitations under the License.
     <head>
         <meta charset="utf-8"/>
         <script src="wasm_exec.js"></script>
-        <script src="dist/bundle.js"></script>
-        <script>
-            const go = new Go();
-            WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
-                go.run(result.instance);
-            });
-        </script>
+        <script src="dist/bundles/app.js"></script>
     </head>
     <body></body>
 </html>

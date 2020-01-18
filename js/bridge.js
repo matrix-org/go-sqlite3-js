@@ -13,7 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { initSqlJs } from 'sql.js'
+import initSqlJs from 'sql.js'
+
 
 initSqlJs().then(SQL => {
 
@@ -27,9 +28,11 @@ initSqlJs().then(SQL => {
         prepare: (db, query) => {
             return db.prepare(query);
         },
-        
-
     }
 
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
+        go.run(result.instance);
+    });
 });
 

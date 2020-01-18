@@ -231,7 +231,9 @@ func (s *SqliteJsStmt) Close() error {
 	return nil
 }
 
+
 // Rows
+
 
 // Columns returns the names of the columns. The number of
 // columns of the result is inferred from the length of the
@@ -259,7 +261,9 @@ func (r *SqliteJsRows) Next(dest []driver.Value) error {
 	return nil
 }
 
+
 // Results
+
 
 // LastInsertId return last inserted ID.
 func (r *SqliteJsResult) LastInsertId() (int64, error) {
