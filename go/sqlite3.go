@@ -22,6 +22,8 @@ import "database/sql/driver"
 import "syscall/js"
 import "context"
 import "fmt"
+import "log"
+import "strconv"
 
 func init() {
 	sql.Register("sqlite-js", &SqliteJsDriver{})
@@ -256,8 +258,8 @@ func (r *SqliteJsRows) Columns() []string {
 	bridge := js.Global().Get("bridge")
 	res := bridge.Call("columns", r.s.js)
 	cols := make([]string, res.Length())
-	for i := 0; i <= res.Length(); i++ {
-		cols[i] = res.Get(string(i)).String()
+	for i := 0; i < res.Length(); i++ {
+		cols[i] = res.Get(strconv.Itoa(i)).String()
 	}
 	return cols
 }
@@ -277,9 +279,24 @@ func (r *SqliteJsRows) Next(dest []driver.Value) error {
 	if res.Type() == js.TypeNull {
 		return fmt.Errorf("couldn't get next row of stmt result")
 	}
-	for i := 0; i <= res.Length(); i++ {
-		// convert from js.Value to sql.Value here
-		dest[i] = res.Get(string(i))
+	for i := 0; i < res.Length(); i++ {
+		jsVal := res.Get(strconv.Itoa(i))
+		switch t := jsVal.Type(); t {
+		case js.TypeNull:
+			dest[i] = nil
+		case js.TypeBoolean:
+			dest[i] = jsVal.Bool()
+		case js.TypeNumber:
+			dest[i] = jsVal.Int()
+		case js.TypeString:
+			dest[i] = jsVal.String()
+		case js.TypeSymbol:
+			log.Fatal("Don't know how to handle Symbols yet")
+		case js.TypeObject:
+			log.Fatal("Don't know how to handle Objects yet")
+		case js.TypeFunction:
+			log.Fatal("Don't know how to handle Functions yet")
+		}
 	}
 	return nil
 }

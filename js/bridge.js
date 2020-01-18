@@ -22,24 +22,34 @@ initSqlJs().then(SQL => {
     // the datatype conversions however happens on the go side, rather than here.
     global.bridge = {
         open: (dsn) => {
-            return new SQL.Database()
+            console.log(`opening db ${dsn}`)
+            global.db = new SQL.Database()
+            return global.db
         },
         prepare: (db, query) => {
+            console.log(`preparing query: ${query}`)
             return db.prepare(query)
         },
         exec: (stmt, ...args) => {
+            console.log(`executing statement ${stmt.jb} with '${args}'`)
             return stmt.run(args)
         },
         query: (stmt, ...args) => {
-            return stmt.bind(args)
+            console.log(`querying statement ${stmt.jb} with '${args}'`)
+            const res = stmt.bind(args)
+            if (!res) return res
+            return stmt.step()
         },
         columns: (stmt) => {
+            console.log(`getting columns as '${stmt.getColumnNames()}' from statement ${stmt}`)
             return stmt.getColumnNames()
         },
         next: (stmt) => {
+            console.log(`getting row from statement ${stmt.jb}`)
             return stmt.get()
         },
         close: (stmt) => {
+            console.log(`freeing statement ${stmt.jb}`)
             return stmt.free()
         },
     }
