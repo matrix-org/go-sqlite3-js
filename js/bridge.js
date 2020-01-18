@@ -28,7 +28,9 @@ initSqlJs().then(SQL => {
         },
         prepare: (db, query) => {
             console.log(`preparing query: ${query}`)
-            return db.prepare(query)
+            const stmt = db.prepare(query)
+            console.log(`prepared query: ${query} as ${stmt.jb}`)
+            return stmt
         },
         exec: (stmt, ...args) => {
             console.log(`executing statement ${stmt.jb} with '${args}'`)
