@@ -18,6 +18,8 @@ import initSqlJs from 'sql.js'
 
 initSqlJs().then(SQL => {
 
+    // exposes sql.js's API in a shape that looks more like a go sql driver.
+    // the datatype conversions however happens on the go side, rather than here.
     global.bridge = {
         open: (dsn) => {
             return new SQL.Database()
@@ -26,7 +28,16 @@ initSqlJs().then(SQL => {
             return db.prepare(query)
         },
         exec: (stmt, ...args) => {
-            return stmt.exec(args)
+            return stmt.run(args)
+        },
+        query: (stmt, ...args) => {
+            return stmt.bind(args)
+        },
+        columns: (stmt) => {
+            return stmt.getColumnNames()
+        },
+        next: (stmt) => {
+            return stmt.get()
         },
         close: (stmt) => {
             return stmt.free()

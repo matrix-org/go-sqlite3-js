@@ -21,6 +21,7 @@ import "database/sql"
 import "database/sql/driver"
 import "syscall/js"
 import "context"
+import "fmt"
 
 func init() {
 	sql.Register("sqlite-js", &SqliteJsDriver{})
@@ -206,7 +207,18 @@ func (s *SqliteJsStmt) QueryContext(ctx context.Context, args []driver.NamedValu
 }
 
 func (s *SqliteJsStmt) query(ctx context.Context, args []namedValue) (driver.Rows, error) {
-	return nil, nil
+	bridge := js.Global().Get("bridge")
+	jsArgs := make([]interface{}, len(args) + 1)
+	jsArgs[0] = s.js
+	for i, v := range args {
+		jsArgs[i + 1] = js.ValueOf(v.Value)
+	}
+	res := bridge.Call("query", jsArgs...)
+	if res.Bool() == false {
+		return nil, fmt.Errorf("couldn't bind params to query")
+	}
+
+	return &SqliteJsRows{s: s}, nil
 }
 
 // NumInput returns the number of placeholder parameters.
@@ -225,7 +237,10 @@ func (s *SqliteJsStmt) NumInput() int {
 // Close closes the statement.
 func (s *SqliteJsStmt) Close() error {
 	bridge := js.Global().Get("bridge")
-	_ = bridge.Call("close", s.js)
+	res := bridge.Call("close", s.js)
+	if res.Bool() == false {
+		return fmt.Errorf("couldn't close stmt")
+	}
 	return nil
 }
 
@@ -238,12 +253,13 @@ func (s *SqliteJsStmt) Close() error {
 // slice. If a particular column name isn't known, an empty
 // string should be returned for that entry.
 func (r *SqliteJsRows) Columns() []string {
-	return nil
-}
-
-// Close closes the rows iterator.
-func (r *SqliteJsRows) Close() error {
-	return nil
+	bridge := js.Global().Get("bridge")
+	res := bridge.Call("columns", r.s.js)
+	cols := make([]string, res.Length())
+	for i := 0; i <= res.Length(); i++ {
+		cols[i] = res.Get(string(i)).String()
+	}
+	return cols
 }
 
 // Next is called to populate the next row of data into
@@ -256,6 +272,20 @@ func (r *SqliteJsRows) Close() error {
 // should be taken when closing Rows not to modify
 // a buffer held in dest.
 func (r *SqliteJsRows) Next(dest []driver.Value) error {
+	bridge := js.Global().Get("bridge")
+	res := bridge.Call("next", r.s.js)
+	if res.Type() == js.TypeNull {
+		return fmt.Errorf("couldn't get next row of stmt result")
+	}
+	for i := 0; i <= res.Length(); i++ {
+		// convert from js.Value to sql.Value here
+		dest[i] = res.Get(string(i))
+	}
+	return nil
+}
+
+// Close closes the rows iterator.
+func (r *SqliteJsRows) Close() error {
 	return nil
 }
 
