@@ -1,4 +1,5 @@
 const path = require('path');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 module.exports = {
     mode: 'development',
@@ -9,7 +10,7 @@ module.exports = {
     devtool: 'inline-source-map',
     devServer: {
         contentBase: './',
-        publicPath: '/dist/',
+        publicPath: '/',
         liveReload: false,
     },
     module: {
@@ -20,14 +21,20 @@ module.exports = {
                 type: "javascript/auto", // https://github.com/webpack/webpack/issues/6725
                 options: {
                     name: '[name].[ext]',
-                    outputPath: 'bundles/',
+                    outputPath: 'bundles/[hash]/',
                 },
             },
         ],
     },
+    plugins: [
+        new HtmlWebpackPlugin({
+            template: './index.html',
+            inject: false,
+        }),
+    ],
     output: {
-        filename: "bundles/[name].js",
-        chunkFilename: "bundles/[name].js",
+        filename: "bundles/[hash]/[name].js",
+        chunkFilename: "bundles/[hash]/[name].js",
         path: path.resolve(__dirname, 'dist'),
     },
     node: {

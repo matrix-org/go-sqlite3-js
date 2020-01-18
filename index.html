@@ -18,7 +18,7 @@ limitations under the License.
     <head>
         <meta charset="utf-8"/>
         <script src="wasm_exec.js"></script>
-        <script src="dist/bundles/app.js"></script>
+        <script src="<%= htmlWebpackPlugin.files.chunks['app'].entry %>"></script>
     </head>
     <body></body>
 </html>
