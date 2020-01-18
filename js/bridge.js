@@ -22,17 +22,20 @@ initSqlJs().then(SQL => {
         open: (dsn) => {
             return new SQL.Database()
         },
-        exec: (db, query, ...args) => {
-            return db.exec(query);
-        },
         prepare: (db, query) => {
-            return db.prepare(query);
+            return db.prepare(query)
+        },
+        exec: (stmt, ...args) => {
+            return stmt.exec(args)
+        },
+        close: (stmt) => {
+            return stmt.free()
         },
     }
 
-    const go = new Go();
+    const go = new Go()
     WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
-        go.run(result.instance);
+        go.run(result.instance)
     });
 });
 

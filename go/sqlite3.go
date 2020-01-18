@@ -76,15 +76,6 @@ func (d *SqliteJsDriver) Open(dsn string) (driver.Conn, error) {
 }
 
 
-// Exec executes a query without returning any rows. The args are for any
-// placeholder parameters in the query.
-func (conn *SqliteJsConn) Exec(query string, args ...interface{}) (driver.Result, error) {
-	bridge := js.Global().Get("bridge")
-	res := bridge.Call("exec", conn.JsDb, query, args)
-	return &SqliteJsResult{js: res}, nil
-}
-
-
 // Transactions
 
 
@@ -137,7 +128,7 @@ func (tx *SqliteJsTx) Rollback() error {
 // needed.
 func (conn *SqliteJsConn) Prepare(query string) (driver.Stmt, error) {
 	bridge := js.Global().Get("bridge")
-	jsStmt := bridge.Call("exec", conn.JsDb, query)
+	jsStmt := bridge.Call("prepare", conn.JsDb, query)
 	return &SqliteJsStmt{
 		c: conn,
 		js: jsStmt,
@@ -177,7 +168,12 @@ func (s *SqliteJsStmt) ExecContext(ctx context.Context, args []driver.NamedValue
 
 func (s *SqliteJsStmt) exec(ctx context.Context, args []namedValue) (driver.Result, error) {
 	bridge := js.Global().Get("bridge")
-	res := bridge.Call("exec", s.c.JsDb, args[0].Value)
+	jsArgs := make([]interface{}, len(args) + 1)
+	jsArgs[0] = s.js
+	for i, v := range args {
+		jsArgs[i + 1] = js.ValueOf(v.Value)
+	}
+	res := bridge.Call("exec", jsArgs...)
 	return &SqliteJsResult{js: res}, nil
 }
 
@@ -228,6 +224,8 @@ func (s *SqliteJsStmt) NumInput() int {
 
 // Close closes the statement.
 func (s *SqliteJsStmt) Close() error {
+	bridge := js.Global().Get("bridge")
+	_ = bridge.Call("close", s.js)
 	return nil
 }
 
