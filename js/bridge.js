@@ -41,7 +41,7 @@ initSqlJs().then(SQL => {
             return stmt.step()
         },
         columns: (stmt) => {
-            console.log(`getting columns as '${stmt.getColumnNames()}' from statement ${stmt}`)
+            console.log(`getting columns as '${stmt.getColumnNames()}' from statement ${stmt.jb}`)
             return stmt.getColumnNames()
         },
         next: (stmt) => {
