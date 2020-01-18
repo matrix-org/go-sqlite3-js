@@ -31,33 +31,34 @@ func main() {
         log.Fatal(err)
     }
 
-    _, err = db.Exec("create table foo(id int)")
+    _, err = db.Exec("create table foo(id int, name string)")
     if err != nil {
         log.Fatal(err)
     }
 
-    _, err = db.Exec("insert into foo values(42)")
+    _, err = db.Exec("insert into foo values(42, 'meaning of life')")
     if err != nil {
         log.Fatal(err)
     }
 
-    _, err = db.Exec("insert into foo values(?)", 31337)
+    _, err = db.Exec("insert into foo values(?, ?)", 31337, "so leet")
     if err != nil {
         log.Fatal(err)
     }
 
     var stmt *sql.Stmt
-    if stmt, err = db.Prepare("insert into foo values(?)"); err != nil {
+    if stmt, err = db.Prepare("insert into foo values(?, ?)"); err != nil {
         log.Fatal(err)
     }
-    stmt.Exec(12345678)
+    stmt.Exec(12345678, "monotonic")
 
     if stmt, err = db.Prepare("select * from foo"); err != nil {
         log.Fatal(err)
     }
     var id int
-    stmt.QueryRow().Scan(&id)
-    log.Printf("Got first id: %d", id)
+    var name string
+    stmt.QueryRow().Scan(&id, &name)
+    log.Printf("Got first row: %d, %s", id, name)
     stmt.Close()
 
     rows, err := db.Query("select * from foo")
@@ -66,13 +67,13 @@ func main() {
     }
     defer rows.Close()
     for rows.Next() {
-        err := rows.Scan(&id)
+        err := rows.Scan(&id, &name)
         if err != nil {
             log.Fatal(err)
         }
-        log.Printf("Got id: %d", id)
+        log.Printf("Got row: %d, %s", id, name)
     }
-    
+
     <-c
 }
 
