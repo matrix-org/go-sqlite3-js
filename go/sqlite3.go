@@ -24,6 +24,8 @@ import "context"
 import "fmt"
 import "log"
 import "strconv"
+import "io"
+import "sync"
 
 func init() {
 	sql.Register("sqlite-js", &SqliteJsDriver{})
@@ -48,9 +50,10 @@ type SqliteJsTx struct {
 type SqliteJsStmt struct {
 	c      *SqliteJsConn
 	js     js.Value
-	t      string
+	mu     sync.Mutex
+	// t      string
 	closed bool
-	cls    bool
+	cls    bool // wild guess: connection level statement?
 }
 
 // SqliteJsResult implements sql.Result.
@@ -63,11 +66,11 @@ type SqliteJsResult struct {
 // SqliteJsRows implements driver.Rows.
 type SqliteJsRows struct {
 	s        *SqliteJsStmt
-	nc       int
-	cols     []string
-	decltype []string
-	cls      bool
+	// nc       int
+	// cols     []string
+	// decltype []string
 	closed   bool
+	cls      bool
 	ctx      context.Context // no better alternative to pass context into Next() method
 }
 
@@ -78,12 +81,22 @@ func (d *SqliteJsDriver) Open(dsn string) (driver.Conn, error) {
 	return &SqliteJsConn{jsDb}, nil
 }
 
+// Close returns the connection to the connection pool. All operations after a
+// Close will return with ErrConnDone. Close is safe to call concurrently with
+// other operations and will block until all other operations finish. It may be
+// useful to first cancel any used context and then call close directly after.
+func (conn SqliteJsConn) Close() error {
+	// TODO
+	return nil
+}
+
 
 // Transactions
 
 
 // Begin starts a transaction. The default isolation level is dependent on the driver.
 func (conn *SqliteJsConn) Begin() (driver.Tx, error) {
+	// TODO
 	return nil, nil
 }
 
@@ -100,24 +113,19 @@ func (conn *SqliteJsConn) Begin() (driver.Tx, error) {
 // value is true to either set the read-only transaction property if supported
 // or return an error if it is not supported.
 func (conn *SqliteJsConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
+	// TODO
 	return nil, nil
-}
-
-// Close returns the connection to the connection pool. All operations after a
-// Close will return with ErrConnDone. Close is safe to call concurrently with
-// other operations and will block until all other operations finish. It may be
-// useful to first cancel any used context and then call close directly after.
-func (conn SqliteJsConn) Close() error {
-	return nil
 }
 
 // Commit commits the transaction.
 func (tx *SqliteJsTx) Commit() error {
+	// TODO
 	return nil
 }
 
 // Rollback aborts the transaction.
 func (tx *SqliteJsTx) Rollback() error {
+	// TODO
 	return nil
 }
 
@@ -169,7 +177,38 @@ func (s *SqliteJsStmt) ExecContext(ctx context.Context, args []driver.NamedValue
 	return s.exec(ctx, list)
 }
 
+// exec executes a query that doesn't return rows. Attempts to honor context timeout.
 func (s *SqliteJsStmt) exec(ctx context.Context, args []namedValue) (driver.Result, error) {
+	if ctx.Done() == nil {
+		return s.execSync(args)
+	}
+
+	type result struct {
+		r   driver.Result
+		err error
+	}
+	resultCh := make(chan result)
+	go func() {
+		r, err := s.execSync(args)
+		resultCh <- result{r, err}
+	}()
+	select {
+	case rv := <-resultCh:
+		return rv.r, rv.err
+	case <-ctx.Done():
+		select {
+		case <-resultCh: // no need to interrupt
+		default:
+			// FIXME: find a way to actually interrupt the connection
+			// this is still racy and can be no-op if executed between sqlite3_* calls in execSync.
+			// C.sqlite3_interrupt(s.c.db)
+			<-resultCh // ensure goroutine completed
+		}
+		return nil, ctx.Err()
+	}
+}
+
+func (s *SqliteJsStmt) execSync(args []namedValue) (driver.Result, error) {
 	bridge := js.Global().Get("bridge")
 	jsArgs := make([]interface{}, len(args) + 1)
 	jsArgs[0] = s.js
@@ -220,7 +259,11 @@ func (s *SqliteJsStmt) query(ctx context.Context, args []namedValue) (driver.Row
 		return nil, fmt.Errorf("couldn't bind params to query")
 	}
 
-	return &SqliteJsRows{s: s}, nil
+	return &SqliteJsRows{
+		s: s, 
+		cls: s.cls, 
+		ctx: ctx,
+	}, nil
 }
 
 // NumInput returns the number of placeholder parameters.
@@ -238,6 +281,13 @@ func (s *SqliteJsStmt) NumInput() int {
 
 // Close closes the statement.
 func (s *SqliteJsStmt) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()	
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+
 	bridge := js.Global().Get("bridge")
 	res := bridge.Call("close", s.js)
 	if res.Bool() == false {
@@ -274,10 +324,42 @@ func (r *SqliteJsRows) Columns() []string {
 // should be taken when closing Rows not to modify
 // a buffer held in dest.
 func (r *SqliteJsRows) Next(dest []driver.Value) error {
+	r.s.mu.Lock()
+	defer r.s.mu.Unlock()
+
+	if r.s.closed {
+		return io.EOF
+	}
+
+	if r.ctx.Done() == nil {
+		return r.nextSyncLocked(dest)
+	}
+	resultCh := make(chan error)
+	go func() {
+		resultCh <- r.nextSyncLocked(dest)
+	}()
+	select {
+	case err := <-resultCh:
+		return err
+	case <-r.ctx.Done():
+		select {
+		case <-resultCh: // no need to interrupt
+		default:
+			// this is still racy and can be no-op if executed between sqlite3_* calls in nextSyncLocked.
+			// FIXME: find a way to interrupt
+			// C.sqlite3_interrupt(rc.s.c.db)
+			<-resultCh // ensure goroutine completed
+		}
+		return r.ctx.Err()
+	}
+}
+
+// nextSyncLocked moves cursor to next; must be called with locked mutex.
+func (r *SqliteJsRows) nextSyncLocked(dest []driver.Value) error {
 	bridge := js.Global().Get("bridge")
 	res := bridge.Call("next", r.s.js)
 	if res.Type() == js.TypeNull {
-		return fmt.Errorf("couldn't get next row of stmt result")
+		return io.EOF
 	}
 	for i := 0; i < res.Length(); i++ {
 		jsVal := res.Get(strconv.Itoa(i))
@@ -303,6 +385,19 @@ func (r *SqliteJsRows) Next(dest []driver.Value) error {
 
 // Close closes the rows iterator.
 func (r *SqliteJsRows) Close() error {
+	r.s.mu.Lock()
+	defer r.s.mu.Unlock()
+
+	if r.s.closed || r.closed {
+		return nil
+	}
+	r.closed = true
+	if r.cls {
+		return r.s.Close()
+	}
+
+	bridge := js.Global().Get("bridge")
+	bridge.Call("reset", r.s.js)
 	return nil
 }
 
@@ -312,10 +407,12 @@ func (r *SqliteJsRows) Close() error {
 
 // LastInsertId return last inserted ID.
 func (r *SqliteJsResult) LastInsertId() (int64, error) {
+	// FIXME: todo
 	return r.id, nil
 }
 
 // RowsAffected return how many rows affected.
 func (r *SqliteJsResult) RowsAffected() (int64, error) {
+	// FIXME: todo
 	return r.changes, nil
 }
