@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Inspired by https://github.com/mattn/go-sqlite3
+// Derived from https://github.com/mattn/go-sqlite3
 
 package main
 
@@ -261,7 +261,7 @@ func (s *SqliteJsStmt) query(ctx context.Context, args []namedValue) (driver.Row
 
 	return &SqliteJsRows{
 		s: s, 
-		cls: s.cls, 
+		cls: s.cls,  // FIXME: we never set s.cls, as we haven't implemented conn.Query(), which would set it
 		ctx: ctx,
 	}, nil
 }
