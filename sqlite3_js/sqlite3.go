@@ -15,7 +15,7 @@
 
 // Derived from https://github.com/mattn/go-sqlite3
 
-package main
+package sqlite3_js
 
 import "database/sql"
 import "database/sql/driver"
@@ -28,7 +28,7 @@ import "io"
 import "sync"
 
 func init() {
-	sql.Register("sqlite-js", &SqliteJsDriver{})
+	sql.Register("sqlite3_js", &SqliteJsDriver{})
 }
 
 // SqliteJsDriver implements driver.Driver.

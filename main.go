@@ -17,6 +17,7 @@ package main
 
 import "database/sql"
 import "log"
+import _ "github.com/matrix-org/go-sqlite3-js/sqlite3_js"
 
 var c chan struct{}
 
@@ -27,7 +28,7 @@ func init() {
 func main() {
     var db *sql.DB
     var err error
-    if db, err = sql.Open("sqlite-js", "test.db"); err != nil {
+    if db, err = sql.Open("sqlite3_js", "test.db"); err != nil {
         log.Fatal(err)
     }
 
