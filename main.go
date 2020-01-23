@@ -53,6 +53,22 @@ func main() {
     }
     stmt.Exec(12345678, "monotonic")
 
+    var txn = db.Begin()
+    if stmt, err = db.Prepare("insert into foo values(?, ?)"); err != nil {
+        log.Fatal(err)
+    }
+    stmt = txn.Stmt(stmt)
+    stmt.Exec(666, "not happening")
+    txn.Rollback()
+
+    var txn = db.Begin()
+    if stmt, err = db.Prepare("insert into foo values(?, ?)"); err != nil {
+        log.Fatal(err)
+    }
+    stmt = txn.Stmt(stmt)
+    stmt.Exec(999, "happening")
+    txn.Commit()
+
     if stmt, err = db.Prepare("select * from foo"); err != nil {
         log.Fatal(err)
     }

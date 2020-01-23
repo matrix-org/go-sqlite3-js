@@ -6,3 +6,9 @@
 * turn main.go into a proper UT
 * test transactions
 * test more types
+
+
+Stuff to check
+ * Exceptions don't kill everything
+ * We don't leak objects
+ * We recover fromnetwork failures (if any)
