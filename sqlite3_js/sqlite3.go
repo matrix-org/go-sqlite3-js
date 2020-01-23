@@ -26,6 +26,7 @@ import "log"
 import "strconv"
 import "io"
 import "sync"
+// import "runtime/debug"
 
 func init() {
 	sql.Register("sqlite3_js", &SqliteJsDriver{})
@@ -75,6 +76,7 @@ type SqliteJsRows struct {
 
 // Database conns
 func (d *SqliteJsDriver) Open(dsn string) (driver.Conn, error) {
+	// debug.PrintStack()
 	bridge := js.Global().Get("_go_sqlite_bridge")
 	jsDb := bridge.Call("open", dsn)
 	return &SqliteJsConn{jsDb}, nil

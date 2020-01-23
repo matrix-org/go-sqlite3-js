@@ -24,10 +24,16 @@ export function init() {
     return initSqlJs().then(SQL => {
         global._go_sqlite_bridge = {
             open: (dsn) => {
-                console.debug(`opening db ${dsn}`)
-                const db = new SQL.Database()
-                global._go_sqlite_dbs[dsn] = new SQL.Database()
-                return db
+                if (global._go_sqlite_dbs[dsn]) {
+                    console.debug(`re-opening db ${dsn}`)
+                    return global._go_sqlite_dbs[dsn]
+                }
+                else {
+                    console.debug(`opening db ${dsn}`)
+                    const db = new SQL.Database()
+                    global._go_sqlite_dbs[dsn] = db
+                    return db
+                }
             },
             prepare: (db, query) => {
                 console.debug(`preparing query: ${query}`)
