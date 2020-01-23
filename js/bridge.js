@@ -20,8 +20,8 @@ global._go_sqlite_dbs = {}
 // exposes sql.js's API in a shape that looks more like a go sql driver.
 // the datatype conversions however happens on the go side, rather than here.
 
-export function init() {
-    return initSqlJs().then(SQL => {
+export function init(config) {
+    return initSqlJs(config).then(SQL => {
         global._go_sqlite_bridge = {
             open: (dsn) => {
                 if (global._go_sqlite_dbs[dsn]) {
@@ -61,6 +61,7 @@ export function init() {
                 if (stmt._has_next) {
                     console.debug(`getting row from statement ${stmt.jb}`)
                     const row = stmt.get()
+                    // FIXME: ugly hack - surely we shouldn't have to monkey-patch this
                     stmt._has_next = stmt.step()
                     return row
                 }
