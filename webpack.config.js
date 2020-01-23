@@ -21,7 +21,7 @@ module.exports = {
                 type: "javascript/auto", // https://github.com/webpack/webpack/issues/6725
                 options: {
                     name: '[name].[ext]',
-                    outputPath: 'bundles/[hash]/',
+                    outputPath: './',
                 },
             },
         ],
@@ -36,6 +36,8 @@ module.exports = {
         filename: "bundles/[hash]/[name].js",
         chunkFilename: "bundles/[hash]/[name].js",
         path: path.resolve(__dirname, 'dist'),
+        libraryTarget: 'var',
+        library: 'GoSqliteJs',
     },
     node: {
         fs: 'empty'

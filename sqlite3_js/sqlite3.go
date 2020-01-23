@@ -51,7 +51,6 @@ type SqliteJsStmt struct {
 	c      *SqliteJsConn
 	js     js.Value
 	mu     sync.Mutex
-	// t      string
 	closed bool
 	cls    bool // wild guess: connection level statement?
 }
@@ -76,7 +75,7 @@ type SqliteJsRows struct {
 
 // Database conns
 func (d *SqliteJsDriver) Open(dsn string) (driver.Conn, error) {
-	bridge := js.Global().Get("bridge")
+	bridge := js.Global().Get("_go_sqlite_bridge")
 	jsDb := bridge.Call("open", dsn)
 	return &SqliteJsConn{jsDb}, nil
 }
@@ -90,14 +89,35 @@ func (conn SqliteJsConn) Close() error {
 	return nil
 }
 
+func (conn *SqliteJsConn) Exec(query string, args []driver.Value) (driver.Result, error) {
+	list := make([]namedValue, len(args))
+	for i, v := range args {
+		list[i] = namedValue{
+			Ordinal: i + 1,
+			Value:   v,
+		}
+	}
+	return conn.exec(context.Background(), query, list)
+}
+
+func (conn *SqliteJsConn) exec(ctx context.Context, query string, args []namedValue) (driver.Result, error) {
+	// FIXME: we removed tbe ability to handle 'tails' - is this a problem?
+	s, err := conn.Prepare(query)
+	if err != nil {
+		return nil, err
+	}
+	var res driver.Result
+	res, err = s.(*SqliteJsStmt).exec(ctx, args)
+	s.Close()
+	return res, err
+}
 
 // Transactions
 
 
 // Begin starts a transaction. The default isolation level is dependent on the driver.
 func (conn *SqliteJsConn) Begin() (driver.Tx, error) {
-	// TODO
-	return nil, nil
+	return conn.begin(context.Background())
 }
 
 // BeginTx starts and returns a new transaction.
@@ -113,20 +133,35 @@ func (conn *SqliteJsConn) Begin() (driver.Tx, error) {
 // value is true to either set the read-only transaction property if supported
 // or return an error if it is not supported.
 func (conn *SqliteJsConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
-	// TODO
-	return nil, nil
+	return conn.begin(ctx)
+}
+
+func (conn *SqliteJsConn) begin(ctx context.Context) (driver.Tx, error) {
+	if _, err := conn.exec(ctx, "BEGIN", nil); err != nil {
+		return nil, err
+	}
+	return &SqliteJsTx{c: conn}, nil
 }
 
 // Commit commits the transaction.
 func (tx *SqliteJsTx) Commit() error {
-	// TODO
-	return nil
+	_, err := tx.c.exec(context.Background(), "COMMIT", nil)
+	if err != nil  {
+		// FIXME: ideally should only be called when
+		// && err.(Error).Code == C.SQLITE_BUSY
+		//
+		// sqlite3 will leave the transaction open in this scenario.
+		// However, database/sql considers the transaction complete once we
+		// return from Commit() - we must clean up to honour its semantics.
+		tx.c.exec(context.Background(), "ROLLBACK", nil)
+	}
+	return err
 }
 
 // Rollback aborts the transaction.
 func (tx *SqliteJsTx) Rollback() error {
-	// TODO
-	return nil
+	_, err := tx.c.exec(context.Background(), "ROLLBACK", nil)
+	return err
 }
 
 
@@ -138,7 +173,7 @@ func (tx *SqliteJsTx) Rollback() error {
 // caller must call the statement's Close method when the statement is no longer
 // needed.
 func (conn *SqliteJsConn) Prepare(query string) (driver.Stmt, error) {
-	bridge := js.Global().Get("bridge")
+	bridge := js.Global().Get("_go_sqlite_bridge")
 	jsStmt := bridge.Call("prepare", conn.JsDb, query)
 	return &SqliteJsStmt{
 		c: conn,
@@ -209,7 +244,7 @@ func (s *SqliteJsStmt) exec(ctx context.Context, args []namedValue) (driver.Resu
 }
 
 func (s *SqliteJsStmt) execSync(args []namedValue) (driver.Result, error) {
-	bridge := js.Global().Get("bridge")
+	bridge := js.Global().Get("_go_sqlite_bridge")
 	jsArgs := make([]interface{}, len(args) + 1)
 	jsArgs[0] = s.js
 	for i, v := range args {
@@ -248,7 +283,7 @@ func (s *SqliteJsStmt) QueryContext(ctx context.Context, args []driver.NamedValu
 }
 
 func (s *SqliteJsStmt) query(ctx context.Context, args []namedValue) (driver.Rows, error) {
-	bridge := js.Global().Get("bridge")
+	bridge := js.Global().Get("_go_sqlite_bridge")
 	jsArgs := make([]interface{}, len(args) + 1)
 	jsArgs[0] = s.js
 	for i, v := range args {
@@ -288,7 +323,7 @@ func (s *SqliteJsStmt) Close() error {
 	}
 	s.closed = true
 
-	bridge := js.Global().Get("bridge")
+	bridge := js.Global().Get("_go_sqlite_bridge")
 	res := bridge.Call("close", s.js)
 	if res.Bool() == false {
 		return fmt.Errorf("couldn't close stmt")
@@ -305,7 +340,7 @@ func (s *SqliteJsStmt) Close() error {
 // slice. If a particular column name isn't known, an empty
 // string should be returned for that entry.
 func (r *SqliteJsRows) Columns() []string {
-	bridge := js.Global().Get("bridge")
+	bridge := js.Global().Get("_go_sqlite_bridge")
 	res := bridge.Call("columns", r.s.js)
 	cols := make([]string, res.Length())
 	for i := 0; i < res.Length(); i++ {
@@ -356,7 +391,7 @@ func (r *SqliteJsRows) Next(dest []driver.Value) error {
 
 // nextSyncLocked moves cursor to next; must be called with locked mutex.
 func (r *SqliteJsRows) nextSyncLocked(dest []driver.Value) error {
-	bridge := js.Global().Get("bridge")
+	bridge := js.Global().Get("_go_sqlite_bridge")
 	res := bridge.Call("next", r.s.js)
 	if res.Type() == js.TypeNull {
 		return io.EOF
@@ -396,7 +431,7 @@ func (r *SqliteJsRows) Close() error {
 		return r.s.Close()
 	}
 
-	bridge := js.Global().Get("bridge")
+	bridge := js.Global().Get("_go_sqlite_bridge")
 	bridge.Call("reset", r.s.js)
 	return nil
 }
