@@ -43,6 +43,7 @@ type SqliteJsDriver struct {
 // SqliteJsConn implements driver.Conn.
 type SqliteJsConn struct {
 	JsDb js.Value
+	mu   *sync.Mutex
 }
 
 // SqliteJsTx implements driver.Tx.
@@ -82,7 +83,10 @@ func (d *SqliteJsDriver) Open(dsn string) (driver.Conn, error) {
 	// debug.PrintStack()
 	bridge := js.Global().Get("_go_sqlite_bridge")
 	jsDb := bridge.Call("open", dsn)
-	return &SqliteJsConn{jsDb}, nil
+	return &SqliteJsConn{
+		JsDb: jsDb,
+		mu:   &sync.Mutex{},
+	}, nil
 }
 
 // Close returns the connection to the connection pool. All operations after a
@@ -246,6 +250,13 @@ func (s *SqliteJsStmt) exec(ctx context.Context, args []namedValue) (driver.Resu
 }
 
 func (s *SqliteJsStmt) execSync(args []namedValue) (driver.Result, error) {
+	// We're going to issue a bunch of bridge calls, some of which (last rowid)
+	// are NOT statement-level scoped, but connection-level scoped, so we cannot just
+	// lock the statement mutex we have already, otherwise multiple goroutines may
+	// exec in this function, causing the last insert rowid to be wrong.
+	s.c.mu.Lock()
+	defer s.c.mu.Unlock()
+
 	bridge := js.Global().Get("_go_sqlite_bridge")
 	jsArgs := make([]interface{}, len(args)+1)
 	jsArgs[0] = s.js
