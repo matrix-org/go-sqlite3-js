@@ -56,9 +56,28 @@ export function init(config) {
                     error: reterr,
                 };
             },
+
             getRowsModified: (db) => {
-                console.debug(`getRowsModified`)
                 return db.getRowsModified()
+            },
+            lastInsertRowid: (db) => {
+                let reterr = null;
+                let retres = null;
+                try {
+                    const res = db.exec("SELECT last_insert_rowid()") // this defaults to the most recent table hence this works
+                    if (res.length !== 1) { // query result
+                        reterr = new Error("last_insert_rowid returned no result");
+                    }
+                    // results of form:
+                    // {columns: ['id'], values:[[1],[2],[3]]},
+                    retres = res[0]["values"][0][0];
+                } catch (err) {
+                    reterr = err;
+                }
+                return {
+                    result: retres,
+                    error: reterr,
+                };
             },
             query: (stmt, ...args) => {
                 console.debug(`querying statement ${stmt.jb} with '${args}'`)

@@ -259,8 +259,20 @@ func (s *SqliteJsStmt) execSync(args []namedValue) (driver.Result, error) {
 		return nil, fmt.Errorf("sql.js: %s", jsErr.Get("message").String())
 	}
 
+	// TODO: Kinda sucks each exec is paired with 2 extra bridge calls but we have to do it ASAP else we risk
+	// getting out of sync with subsequent inserts.
 	rowsModified := bridge.Call("getRowsModified", s.c.JsDb)
-	return &SqliteJsResult{js: multiRes.Get("result"), changes: int64(rowsModified.Int())}, nil
+
+	rowidRes := bridge.Call("lastInsertRowid", s.c.JsDb) // this defaults to the most recent table hence this works
+	jsErr = rowidRes.Get("error")
+	if jsErr.Truthy() {
+		return nil, fmt.Errorf("sql.js: error getting rowid: %s", jsErr.Get("message").String())
+	}
+	return &SqliteJsResult{
+		js:      multiRes.Get("result"),
+		changes: int64(rowsModified.Int()),
+		id:      int64(rowidRes.Get("result").Int()),
+	}, nil
 }
 
 // Query executes a query that may return rows, such as a
@@ -446,7 +458,6 @@ func (r *SqliteJsRows) Close() error {
 
 // LastInsertId return last inserted ID.
 func (r *SqliteJsResult) LastInsertId() (int64, error) {
-	// FIXME: todo
 	return r.id, nil
 }
 

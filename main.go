@@ -28,12 +28,21 @@ func init() {
 	c = make(chan struct{})
 }
 
-func rowsAffected(msg string, res sql.Result) {
+func printResultMetadata(msg string, res sql.Result) {
 	if res == nil {
+		log.Printf("nil result")
 		return
 	}
+	// the impl never returns an error on these functions
 	ra, err := res.RowsAffected()
-	log.Printf("%s : rows affected: %d %s", msg, ra, err)
+	if err != nil {
+		log.Fatal(err)
+	}
+	rowid, err := res.LastInsertId()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("%s => rowid: %d rows affected: %d", msg, rowid, ra)
 }
 
 func main() {
@@ -43,7 +52,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	_, err = db.Exec("create table foo(id int PRIMARY KEY, name string)")
+	_, err = db.Exec("create table foo(id INTEGER PRIMARY KEY, name string)")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -52,7 +61,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	rowsAffected("After insert on db", res)
+	printResultMetadata("After insert on db", res)
 
 	res, err = db.Exec("insert into foo values(42, 'meaning of life')")
 	if err == nil {
@@ -68,7 +77,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	rowsAffected("After updating 2 rows", res)
+	printResultMetadata("After updating 2 rows", res)
 
 	_, err = db.Exec("insert into foo values(?, ?)", 31337, "so leet")
 	if err != nil {
@@ -80,7 +89,7 @@ func main() {
 		log.Fatal(err)
 	}
 	res, err = stmt.Exec(12345678, "monotonic")
-	rowsAffected("After insert on stmt", res)
+	printResultMetadata("After insert on stmt", res)
 
 	var txn *sql.Tx
 	if txn, err = db.Begin(); err != nil {
@@ -101,7 +110,7 @@ func main() {
 	}
 	stmt = txn.Stmt(stmt)
 	res, err = stmt.Exec(999, "happening")
-	rowsAffected("After insert on stmt in txn", res)
+	printResultMetadata("After insert on stmt in txn", res)
 	txn.Commit()
 
 	if stmt, err = db.Prepare("select * from foo"); err != nil {
