@@ -1,12 +1,12 @@
 // -*- coding: utf-8 -*-
 // Copyright 2020 The Matrix.org Foundation C.I.C.
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,15 +17,18 @@
 
 package sqlite3_js
 
-import "database/sql"
-import "database/sql/driver"
-import "syscall/js"
-import "context"
-import "fmt"
-import "log"
-import "strconv"
-import "io"
-import "sync"
+import (
+	"context"
+	"database/sql"
+	"database/sql/driver"
+	"fmt"
+	"io"
+	"log"
+	"strconv"
+	"sync"
+	"syscall/js"
+)
+
 // import "runtime/debug"
 
 func init() {
@@ -65,13 +68,13 @@ type SqliteJsResult struct {
 
 // SqliteJsRows implements driver.Rows.
 type SqliteJsRows struct {
-	s        *SqliteJsStmt
+	s *SqliteJsStmt
 	// nc       int
 	// cols     []string
 	// decltype []string
-	closed   bool
-	cls      bool
-	ctx      context.Context // no better alternative to pass context into Next() method
+	closed bool
+	cls    bool
+	ctx    context.Context // no better alternative to pass context into Next() method
 }
 
 // Database conns
@@ -116,7 +119,6 @@ func (conn *SqliteJsConn) exec(ctx context.Context, query string, args []namedVa
 
 // Transactions
 
-
 // Begin starts a transaction. The default isolation level is dependent on the driver.
 func (conn *SqliteJsConn) Begin() (driver.Tx, error) {
 	return conn.begin(context.Background())
@@ -148,7 +150,7 @@ func (conn *SqliteJsConn) begin(ctx context.Context) (driver.Tx, error) {
 // Commit commits the transaction.
 func (tx *SqliteJsTx) Commit() error {
 	_, err := tx.c.exec(context.Background(), "COMMIT", nil)
-	if err != nil  {
+	if err != nil {
 		// FIXME: ideally should only be called when
 		// && err.(Error).Code == C.SQLITE_BUSY
 		//
@@ -166,9 +168,7 @@ func (tx *SqliteJsTx) Rollback() error {
 	return err
 }
 
-
 // Statements
-
 
 // Prepare creates a prepared statement for later queries or executions. Multiple
 // queries or executions may be run concurrently from the returned statement. The
@@ -178,7 +178,7 @@ func (conn *SqliteJsConn) Prepare(query string) (driver.Stmt, error) {
 	bridge := js.Global().Get("_go_sqlite_bridge")
 	jsStmt := bridge.Call("prepare", conn.JsDb, query)
 	return &SqliteJsStmt{
-		c: conn,
+		c:  conn,
 		js: jsStmt,
 	}, nil
 }
@@ -190,7 +190,7 @@ type namedValue struct {
 }
 
 // Exec executes a prepared statement with the given arguments and returns a
-// Result summarizing the effect of the statement. 
+// Result summarizing the effect of the statement.
 func (s *SqliteJsStmt) Exec(args []driver.Value) (driver.Result, error) {
 	list := make([]namedValue, len(args))
 	for i, v := range args {
@@ -247,15 +247,21 @@ func (s *SqliteJsStmt) exec(ctx context.Context, args []namedValue) (driver.Resu
 
 func (s *SqliteJsStmt) execSync(args []namedValue) (driver.Result, error) {
 	bridge := js.Global().Get("_go_sqlite_bridge")
-	jsArgs := make([]interface{}, len(args) + 1)
+	jsArgs := make([]interface{}, len(args)+1)
 	jsArgs[0] = s.js
 	for i, v := range args {
-		jsArgs[i + 1] = js.ValueOf(v.Value)
+		jsArgs[i+1] = js.ValueOf(v.Value)
 	}
-	res := bridge.Call("exec", jsArgs...)
-	return &SqliteJsResult{js: res}, nil
-}
+	multiRes := bridge.Call("exec", jsArgs...)
 
+	jsErr := multiRes.Get("error")
+	if jsErr.Truthy() {
+		return nil, fmt.Errorf("sql.js: %s", jsErr.Get("message").String())
+	}
+
+	rowsModified := bridge.Call("getRowsModified", s.c.JsDb)
+	return &SqliteJsResult{js: multiRes.Get("result"), changes: int64(rowsModified.Int())}, nil
+}
 
 // Query executes a query that may return rows, such as a
 // SELECT.
@@ -286,10 +292,10 @@ func (s *SqliteJsStmt) QueryContext(ctx context.Context, args []driver.NamedValu
 
 func (s *SqliteJsStmt) query(ctx context.Context, args []namedValue) (driver.Rows, error) {
 	bridge := js.Global().Get("_go_sqlite_bridge")
-	jsArgs := make([]interface{}, len(args) + 1)
+	jsArgs := make([]interface{}, len(args)+1)
 	jsArgs[0] = s.js
 	for i, v := range args {
-		jsArgs[i + 1] = js.ValueOf(v.Value)
+		jsArgs[i+1] = js.ValueOf(v.Value)
 	}
 	res := bridge.Call("query", jsArgs...)
 	if res.Bool() == false {
@@ -297,8 +303,8 @@ func (s *SqliteJsStmt) query(ctx context.Context, args []namedValue) (driver.Row
 	}
 
 	return &SqliteJsRows{
-		s: s, 
-		cls: s.cls,  // FIXME: we never set s.cls, as we haven't implemented conn.Query(), which would set it
+		s:   s,
+		cls: s.cls, // FIXME: we never set s.cls, as we haven't implemented conn.Query(), which would set it
 		ctx: ctx,
 	}, nil
 }
@@ -319,7 +325,7 @@ func (s *SqliteJsStmt) NumInput() int {
 // Close closes the statement.
 func (s *SqliteJsStmt) Close() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()	
+	defer s.mu.Unlock()
 	if s.closed {
 		return nil
 	}
@@ -333,9 +339,7 @@ func (s *SqliteJsStmt) Close() error {
 	return nil
 }
 
-
 // Rows
-
 
 // Columns returns the names of the columns. The number of
 // columns of the result is inferred from the length of the
@@ -438,9 +442,7 @@ func (r *SqliteJsRows) Close() error {
 	return nil
 }
 
-
 // Results
-
 
 // LastInsertId return last inserted ID.
 func (r *SqliteJsResult) LastInsertId() (int64, error) {
@@ -450,6 +452,5 @@ func (r *SqliteJsResult) LastInsertId() (int64, error) {
 
 // RowsAffected return how many rows affected.
 func (r *SqliteJsResult) RowsAffected() (int64, error) {
-	// FIXME: todo
 	return r.changes, nil
 }

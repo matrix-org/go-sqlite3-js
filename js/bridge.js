@@ -43,7 +43,22 @@ export function init(config) {
             },
             exec: (stmt, ...args) => {
                 console.debug(`executing statement ${stmt.jb} with '${args}'`)
-                return stmt.run(args)
+                let retres = null;
+                let reterr = null;
+                try {
+                    const res = stmt.run(args)
+                    retres = res
+                } catch (err) {
+                    reterr = err;
+                }
+                return {
+                    result: retres,
+                    error: reterr,
+                };
+            },
+            getRowsModified: (db) => {
+                console.debug(`getRowsModified`)
+                return db.getRowsModified()
             },
             query: (stmt, ...args) => {
                 console.debug(`querying statement ${stmt.jb} with '${args}'`)
