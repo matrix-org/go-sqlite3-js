@@ -61,6 +61,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	earlierPrepStmt, err := db.Prepare("SELECT id, name FROM foo")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	res, err := db.Exec("insert into bar values(9001)")
 	if err != nil {
 		log.Fatal(err)
@@ -136,7 +141,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer rows.Close()
 	for rows.Next() {
 		err := rows.Scan(&id, &name)
 		if err != nil {
@@ -144,6 +148,20 @@ func main() {
 		}
 		log.Printf("Got row: %d, %s", id, name)
 	}
+	rows.Close()
+
+	rows, err = earlierPrepStmt.Query()
+	if err != nil {
+		log.Fatal(err)
+	}
+	for rows.Next() {
+		err := rows.Scan(&id, &name)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("Empty db.Query() got row: %d, %s", id, name)
+	}
+	rows.Close()
 
 	<-c
 }

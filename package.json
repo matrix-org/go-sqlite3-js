@@ -16,6 +16,7 @@
     "webpack-dev-server": "^3.10.1"
   },
   "dependencies": {
+    "go-sqlite-js": "https://github.com/matrix-org/go-sqlite3-js#master",
     "sql.js": "^1.1.0"
   }
 }

@@ -36,9 +36,8 @@ export function init(config) {
                 }
             },
             prepare: (db, query) => {
-                console.debug(`preparing query: ${query}`)
                 const stmt = db.prepare(query)
-                console.debug(`prepared query: ${query} as ${stmt.jb}`)
+                console.debug(`db.prepare: ${stmt.jb} => ${query}`)
                 return stmt
             },
             execMany: (db, query) => {
@@ -47,6 +46,7 @@ export function init(config) {
                     error: null,
                 }
                 try {
+                    console.debug(`db.exec: ${query}`)
                     res.result = db.exec(query);
                 } catch (err) {
                     res.error = err;
@@ -54,7 +54,7 @@ export function init(config) {
                 return res;
             },
             exec: (stmt, ...args) => {
-                console.debug(`executing statement ${stmt.jb} with '${args}'`)
+                console.debug(`stmt.run: ${stmt.jb} => '${args}'`)
                 let retres = null;
                 let reterr = null;
                 try {
@@ -92,22 +92,24 @@ export function init(config) {
                 };
             },
             query: (stmt, ...args) => {
-                console.debug(`querying statement ${stmt.jb} with '${args}'`)
+                console.debug(`stmt.bind: ${stmt.jb} => '${args}'`)
                 const res = stmt.bind(args)
                 if (!res) return res
                 // FIXME: storing random state on stmt is horrific
+                console.debug(`stmt.step: ${stmt.jb}`)
                 stmt._has_next = stmt.step()
                 return stmt._has_next
             },
             columns: (stmt) => {
-                console.debug(`getting columns as '${stmt.getColumnNames()}' from statement ${stmt.jb}`)
+                console.debug(`stmt.getColumnNames(): ${stmt.jb} => '${stmt.getColumnNames()}'`)
                 return stmt.getColumnNames()
             },
             next: (stmt) => {
                 if (stmt._has_next) {
-                    console.debug(`getting row from statement ${stmt.jb}`)
+                    console.debug(`next => stmt.get: ${stmt.jb}`)
                     const row = stmt.get()
                     // FIXME: ugly hack - surely we shouldn't have to monkey-patch this
+                    console.debug(`next => stmt.step: ${stmt.jb}`)
                     stmt._has_next = stmt.step()
                     return row
                 }
@@ -116,11 +118,11 @@ export function init(config) {
                 }
             },
             close: (stmt) => {
-                console.debug(`freeing statement ${stmt.jb}`)
+                console.debug(`stmt.free: ${stmt.jb}`)
                 return stmt.free()
             },
             reset: (stmt) => {
-                console.debug(`resetting statement ${stmt.jb}`)
+                console.debug(`stmt.reset: ${stmt.jb}`)
                 return stmt.reset()
             }
         }
