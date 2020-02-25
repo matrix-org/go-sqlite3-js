@@ -54,7 +54,7 @@ export function init(config) {
                 return res;
             },
             exec: (stmt, ...args) => {
-                console.debug(`stmt.run: ${stmt.jb} => '${args}'`)
+                console.debug(`stmt.run: ${stmt.jb} => '${args}' ${typeof args}`)
                 let retres = null;
                 let reterr = null;
                 try {
