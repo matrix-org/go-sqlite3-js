@@ -285,7 +285,13 @@ func (s *SqliteJsStmt) execSync(args []namedValue) (driver.Result, error) {
 	jsArgs := make([]interface{}, len(args)+1)
 	jsArgs[0] = s.js
 	for i, v := range args {
-		jsArgs[i+1] = js.ValueOf(v.Value)
+		if bval, ok := v.Value.([]byte); ok {
+			dst := js.Global().Get("Uint8Array").New(len(bval))
+			js.CopyBytesToJS(dst, bval)
+			jsArgs[i+1] = dst
+		} else {
+			jsArgs[i+1] = js.ValueOf(v.Value)
+		}
 	}
 	multiRes := bridge.Call("exec", jsArgs...)
 
@@ -342,7 +348,13 @@ func (s *SqliteJsStmt) query(ctx context.Context, args []namedValue) (driver.Row
 	jsArgs := make([]interface{}, len(args)+1)
 	jsArgs[0] = s.js
 	for i, v := range args {
-		jsArgs[i+1] = js.ValueOf(v.Value)
+		if bval, ok := v.Value.([]byte); ok {
+			dst := js.Global().Get("Uint8Array").New(len(bval))
+			js.CopyBytesToJS(dst, bval)
+			jsArgs[i+1] = dst
+		} else {
+			jsArgs[i+1] = js.ValueOf(v.Value)
+		}
 	}
 	res := bridge.Call("query", jsArgs...)
 	if res.Get("error").Truthy() {
@@ -469,7 +481,14 @@ func (r *SqliteJsRows) nextSyncLocked(dest []driver.Value) error {
 		case js.TypeSymbol:
 			log.Fatal("Don't know how to handle Symbols yet")
 		case js.TypeObject:
-			log.Fatal("Don't know how to handle Objects yet")
+			// check for []byte
+			if jsVal.Get("byteLength").Truthy() {
+				uint8slice := make([]uint8, jsVal.Get("byteLength").Int())
+				js.CopyBytesToGo(uint8slice, jsVal)
+				dest[i] = []byte(uint8slice)
+			} else {
+				log.Fatal("Don't know how to handle Objects yet")
+			}
 		case js.TypeFunction:
 			log.Fatal("Don't know how to handle Functions yet")
 		}

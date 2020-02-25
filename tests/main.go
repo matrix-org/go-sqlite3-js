@@ -57,10 +57,28 @@ func main() {
 		log.Fatal(err)
 	}
 
-	_, err = db.Exec("CREATE TABLE bar(id INTEGER); create table foo(id INTEGER PRIMARY KEY, name string)")
+	_, err = db.Exec("CREATE TABLE bar(id INTEGER, thing BLOB); create table foo(id INTEGER PRIMARY KEY, name string)")
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	blobStmt, err := db.Prepare("INSERT INTO bar(id, thing) values($1, $2)")
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = blobStmt.Exec(44, []byte("hello world"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	blobSelectStmt, err := db.Prepare("SELECT thing FROM bar WHERE id = $1")
+	if err != nil {
+		log.Fatal(err)
+	}
+	var bres []byte
+	if err := blobSelectStmt.QueryRow(44).Scan(&bres); err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("blob select: %s", bres)
 
 	earlierPrepStmt, err := db.Prepare("SELECT id, name FROM foo")
 	if err != nil {
@@ -83,7 +101,7 @@ func main() {
 		log.Println("Returns sql.ErrNoRows ok")
 	}
 
-	res, err := db.Exec("insert into bar values(9001)")
+	res, err := db.Exec("insert into bar values(9001, NULL)")
 	if err != nil {
 		log.Fatal(err)
 	}
