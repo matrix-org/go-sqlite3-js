@@ -248,6 +248,11 @@ func (s *SqliteJsStmt) exec(ctx context.Context, args []namedValue) (driver.Resu
 	}
 	resultCh := make(chan result)
 	go func() {
+		defer func() {
+			if perr := recover(); perr != nil {
+				fmt.Printf("SqliteJsStmt.exec panicked! nargs=%d err=%s", len(args), perr)
+			}
+		}()
 		r, err := s.execSync(args)
 		resultCh <- result{r, err}
 	}()
@@ -418,6 +423,11 @@ func (r *SqliteJsRows) Next(dest []driver.Value) error {
 	}
 	resultCh := make(chan error)
 	go func() {
+		defer func() {
+			if perr := recover(); perr != nil {
+				fmt.Printf("SqliteJsRows.Next panicked! err=%s", perr)
+			}
+		}()
 		resultCh <- r.nextSyncLocked(dest)
 	}()
 	select {
