@@ -19,6 +19,7 @@ package main
 // cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" .
 
 import (
+	"context"
 	"database/sql"
 	"log"
 
@@ -71,6 +72,16 @@ func main() {
 		log.Fatal(err)
 	}
 	rows.Close()
+
+	// query row context should return ErrNoRows
+	var a int64
+	var b string
+	err = earlierPrepStmt.QueryRowContext(context.Background()).Scan(&a, &b)
+	if err != sql.ErrNoRows {
+		log.Fatalf("Expected sql.ErrNoRows to QueryRowContext, got %s", err)
+	} else {
+		log.Println("Returns sql.ErrNoRows ok")
+	}
 
 	res, err := db.Exec("insert into bar values(9001)")
 	if err != nil {
