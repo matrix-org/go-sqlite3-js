@@ -251,6 +251,7 @@ func (s *SqliteJsStmt) exec(ctx context.Context, args []namedValue) (driver.Resu
 		defer func() {
 			if perr := recover(); perr != nil {
 				fmt.Printf("SqliteJsStmt.exec panicked! nargs=%d err=%s", len(args), perr)
+				resultCh <- result{nil, fmt.Errorf("SqliteJsStmt.exec panicked! nargs=%d err=%s", len(args), perr)}
 			}
 		}()
 		r, err := s.execSync(args)
@@ -426,6 +427,7 @@ func (r *SqliteJsRows) Next(dest []driver.Value) error {
 		defer func() {
 			if perr := recover(); perr != nil {
 				fmt.Printf("SqliteJsRows.Next panicked! err=%s", perr)
+				resultCh <- fmt.Errorf("SqliteJsRows.Next panicked! err=%s", perr)
 			}
 		}()
 		resultCh <- r.nextSyncLocked(dest)
