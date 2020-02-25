@@ -339,8 +339,8 @@ func (s *SqliteJsStmt) query(ctx context.Context, args []namedValue) (driver.Row
 		jsArgs[i+1] = js.ValueOf(v.Value)
 	}
 	res := bridge.Call("query", jsArgs...)
-	if res.Bool() == false {
-		return nil, fmt.Errorf("couldn't bind params to query")
+	if res.Get("error").Truthy() {
+		return nil, fmt.Errorf("sql.js: %s", res.Get("error").Get("message").String())
 	}
 
 	return &SqliteJsRows{

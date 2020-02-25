@@ -93,12 +93,20 @@ export function init(config) {
             },
             query: (stmt, ...args) => {
                 console.debug(`stmt.bind: ${stmt.jb} => '${args}'`)
-                const res = stmt.bind(args)
-                if (!res) return res
+                const ok = stmt.bind(args)
+                if (!ok) { // bind failed
+                    return {
+                        result: null,
+                        error: new Error(`Failed to bind query: ${stmt.jb}`),
+                    }
+                }
                 // FIXME: storing random state on stmt is horrific
                 console.debug(`stmt.step: ${stmt.jb}`)
                 stmt._has_next = stmt.step()
-                return stmt._has_next
+                return {
+                    result: stmt._has_next,
+                    error: null,
+                }
             },
             columns: (stmt) => {
                 console.debug(`stmt.getColumnNames(): ${stmt.jb} => '${stmt.getColumnNames()}'`)

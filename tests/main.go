@@ -65,6 +65,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// querying an empty table shouldn't produce an error
+	rows, err := earlierPrepStmt.Query()
+	if err != nil {
+		log.Fatal(err)
+	}
+	rows.Close()
 
 	res, err := db.Exec("insert into bar values(9001)")
 	if err != nil {
@@ -137,7 +143,7 @@ func main() {
 	log.Printf("Got first row: %d, %s", id, name)
 	stmt.Close()
 
-	rows, err := db.Query("select * from foo")
+	rows, err = db.Query("select * from foo")
 	if err != nil {
 		log.Fatal(err)
 	}
