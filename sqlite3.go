@@ -25,6 +25,7 @@ import (
 	"io"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall/js"
 )
@@ -99,6 +100,23 @@ func (conn SqliteJsConn) Close() error {
 }
 
 func (conn *SqliteJsConn) Exec(query string, args []driver.Value) (driver.Result, error) {
+	if strings.Contains(query, ";") {
+		if len(args) != 0 {
+			return nil, fmt.Errorf("cannot exec multiple statements with placeholders, query: %s nargs=%d", query, len(args))
+		}
+		bridge := js.Global().Get("_go_sqlite_bridge")
+		jsQueryRes := bridge.Call("execMany", conn.JsDb, query)
+		jsErr := jsQueryRes.Get("error")
+		if jsErr.Truthy() {
+			return nil, fmt.Errorf("sql.js: %s", jsErr.Get("message").String())
+		}
+		return &SqliteJsResult{
+			js:      jsQueryRes.Get("result"),
+			changes: 0,
+			id:      0,
+		}, nil
+	}
+
 	list := make([]namedValue, len(args))
 	for i, v := range args {
 		list[i] = namedValue{

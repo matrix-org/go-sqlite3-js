@@ -13,13 +13,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sqlite3_js_test
+package main
+
+// GOOS=js GOARCH=wasm go build -o main.wasm  ./tests/main.go
+// cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" .
 
 import (
 	"database/sql"
 	"log"
 
-	_ "github.com/matrix-org/go-sqlite3-js/sqlite3_js"
+	_ "github.com/matrix-org/go-sqlite3-js"
 )
 
 var c chan struct{}
@@ -46,18 +49,25 @@ func printResultMetadata(msg string, res sql.Result) {
 }
 
 func main() {
+	log.Printf("Opening sqlite3_js driver...")
 	var db *sql.DB
 	var err error
 	if db, err = sql.Open("sqlite3_js", "test.db"); err != nil {
 		log.Fatal(err)
 	}
 
-	_, err = db.Exec("create table foo(id INTEGER PRIMARY KEY, name string)")
+	_, err = db.Exec("CREATE TABLE bar(id INTEGER); create table foo(id INTEGER PRIMARY KEY, name string)")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	res, err := db.Exec("insert into foo values(42, 'meaning of life')")
+	res, err := db.Exec("insert into bar values(9001)")
+	if err != nil {
+		log.Fatal(err)
+	}
+	printResultMetadata("After insert on db", res)
+
+	res, err = db.Exec("insert into foo values(42, 'meaning of life')")
 	if err != nil {
 		log.Fatal(err)
 	}

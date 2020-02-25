@@ -8,7 +8,7 @@ To run:
 
 ```bash
 # for go:
-GOOS=js GOARCH=wasm go build -o main.wasm
+GOOS=js GOARCH=wasm go build -o main.wasm  ./tests/main.go
 cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" .
 
 # for js:

@@ -41,6 +41,18 @@ export function init(config) {
                 console.debug(`prepared query: ${query} as ${stmt.jb}`)
                 return stmt
             },
+            execMany: (db, query) => {
+                let res = {
+                    result: null,
+                    error: null,
+                }
+                try {
+                    res.result = db.exec(query);
+                } catch (err) {
+                    res.error = err;
+                }
+                return res;
+            },
             exec: (stmt, ...args) => {
                 console.debug(`executing statement ${stmt.jb} with '${args}'`)
                 let retres = null;
