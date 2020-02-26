@@ -173,18 +173,21 @@ func (conn *SqliteJsConn) BeginTx(ctx context.Context, opts driver.TxOptions) (d
 }
 
 func (conn *SqliteJsConn) begin(ctx context.Context) (driver.Tx, error) {
+	/*
 	if conn.disableTxns {
 		fmt.Println("Ignoring BEGIN, txns disabled")
 		return &SqliteJsTx{c: conn}, nil
 	}
 	if _, err := conn.exec(ctx, "BEGIN", nil); err != nil {
 		return nil, err
-	}
+	} */
 	return &SqliteJsTx{c: conn}, nil
 }
 
 // Commit commits the transaction.
 func (tx *SqliteJsTx) Commit() error {
+	return nil
+	/*
 	if tx.c.disableTxns {
 		fmt.Println("Ignoring COMMIT, txns disabled")
 		return nil
@@ -199,17 +202,19 @@ func (tx *SqliteJsTx) Commit() error {
 		// return from Commit() - we must clean up to honour its semantics.
 		tx.c.exec(context.Background(), "ROLLBACK", nil)
 	}
-	return err
+	return err */
 }
 
 // Rollback aborts the transaction.
 func (tx *SqliteJsTx) Rollback() error {
+	return nil
+	/*
 	if tx.c.disableTxns {
 		fmt.Println("Ignoring ROLLBACK, txns disabled")
 		return nil
 	}
 	_, err := tx.c.exec(context.Background(), "ROLLBACK", nil)
-	return err
+	return err */
 }
 
 // Statements
