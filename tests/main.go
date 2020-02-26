@@ -123,6 +123,42 @@ func checkErrNoRows(db *sql.DB) {
 	}
 }
 
+func checkMultipleConnSupport() {
+	// We check this by doing multiple txns at once. If the same conn is used,
+	// we'll error out with:
+	//    sql.js: cannot start a transaction within a transaction
+	log.Println("checkMultipleConnSupport:")
+	var db *sql.DB
+	var err error
+	// Dendrite only does this once, then calls a bunch of stuff
+	if db, err = sql.Open("sqlite3_js", "test2.db"); err != nil {
+		log.Fatal(err)
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = tx.Exec("CREATE TABLE foo(id INTEGER)")
+	if err != nil {
+		log.Fatal(err)
+	}
+	tx2, err := db.Begin()
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = tx2.Exec("CREATE TABLE bar(id INTEGER)")
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err = tx2.Commit(); err != nil {
+		log.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		log.Fatal(err)
+	}
+}
+
 func main() {
 	log.Printf("Opening sqlite3_js driver...")
 	var db *sql.DB
@@ -228,6 +264,8 @@ func main() {
 	rows.Close()
 
 	checkEmptyQueryWithResults(db)
+
+	checkMultipleConnSupport()
 
 	<-c
 }
