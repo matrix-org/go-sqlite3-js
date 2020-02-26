@@ -131,7 +131,7 @@ func checkMultipleConnSupport() {
 	var db *sql.DB
 	var err error
 	// Dendrite only does this once, then calls a bunch of stuff
-	if db, err = sql.Open("sqlite3_js", "test2.db?txns=false"); err != nil {
+	if db, err = sql.Open("sqlite3_js", "file:test2.db?txns=false"); err != nil {
 		log.Fatal(err)
 	}
 

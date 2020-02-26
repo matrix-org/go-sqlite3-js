@@ -85,6 +85,7 @@ type SqliteJsRows struct {
 // Database conns
 func (d *SqliteJsDriver) Open(dsn string) (driver.Conn, error) {
 	// debug.PrintStack()
+	fmt.Println("Open -> " + dsn)
 	disableTxns := strings.HasSuffix(dsn, "?txns=false")
 	if disableTxns {
 		dsn = strings.TrimSuffix(dsn, "?txns=false")
