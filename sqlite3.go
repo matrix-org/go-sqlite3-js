@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -219,6 +220,10 @@ func (tx *SqliteJsTx) Rollback() error {
 // needed.
 func (conn *SqliteJsConn) Prepare(query string) (driver.Stmt, error) {
 	bridge := js.Global().Get("_go_sqlite_bridge")
+	fmt.Println("Conn.Prepare " + query)
+	if query == "BEGIN" || query == "COMMIT" || query == "ROLLBACK" {
+	debug.PrintStack()
+	}
 	jsStmt := bridge.Call("prepare", conn.JsDb, query)
 	return &SqliteJsStmt{
 		c:  conn,
