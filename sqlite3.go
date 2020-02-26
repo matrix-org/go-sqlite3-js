@@ -45,6 +45,9 @@ type SqliteJsDriver struct {
 type SqliteJsConn struct {
 	JsDb js.Value
 	mu   *sync.Mutex
+	// set to true to disable BEGIN/COMMIT/ROLLBACK -- YOLO!
+	// Set via the string '?txns=false' at the end of the DSN in Open
+	disableTxns bool
 }
 
 // SqliteJsTx implements driver.Tx.
@@ -82,11 +85,16 @@ type SqliteJsRows struct {
 // Database conns
 func (d *SqliteJsDriver) Open(dsn string) (driver.Conn, error) {
 	// debug.PrintStack()
+	disableTxns := strings.HasSuffix(dsn, "?txns=false")
+	if disableTxns {
+		dsn = strings.TrimSuffix(dsn, "?txns=false")
+	}
 	bridge := js.Global().Get("_go_sqlite_bridge")
 	jsDb := bridge.Call("open", dsn)
 	return &SqliteJsConn{
-		JsDb: jsDb,
-		mu:   &sync.Mutex{},
+		JsDb:        jsDb,
+		mu:          &sync.Mutex{},
+		disableTxns: disableTxns,
 	}, nil
 }
 
@@ -163,6 +171,9 @@ func (conn *SqliteJsConn) BeginTx(ctx context.Context, opts driver.TxOptions) (d
 }
 
 func (conn *SqliteJsConn) begin(ctx context.Context) (driver.Tx, error) {
+	if conn.disableTxns {
+		return &SqliteJsTx{c: conn}, nil
+	}
 	if _, err := conn.exec(ctx, "BEGIN", nil); err != nil {
 		return nil, err
 	}
@@ -171,6 +182,9 @@ func (conn *SqliteJsConn) begin(ctx context.Context) (driver.Tx, error) {
 
 // Commit commits the transaction.
 func (tx *SqliteJsTx) Commit() error {
+	if tx.c.disableTxns {
+		return nil
+	}
 	_, err := tx.c.exec(context.Background(), "COMMIT", nil)
 	if err != nil {
 		// FIXME: ideally should only be called when
@@ -186,6 +200,9 @@ func (tx *SqliteJsTx) Commit() error {
 
 // Rollback aborts the transaction.
 func (tx *SqliteJsTx) Rollback() error {
+	if tx.c.disableTxns {
+		return nil
+	}
 	_, err := tx.c.exec(context.Background(), "ROLLBACK", nil)
 	return err
 }
