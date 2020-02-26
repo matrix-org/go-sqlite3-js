@@ -49,19 +49,8 @@ func printResultMetadata(msg string, res sql.Result) {
 	log.Printf("%s => rowid: %d rows affected: %d", msg, rowid, ra)
 }
 
-func main() {
-	log.Printf("Opening sqlite3_js driver...")
-	var db *sql.DB
-	var err error
-	if db, err = sql.Open("sqlite3_js", "test.db"); err != nil {
-		log.Fatal(err)
-	}
-
-	_, err = db.Exec("CREATE TABLE bar(id INTEGER, thing BLOB); create table foo(id INTEGER PRIMARY KEY, name string)")
-	if err != nil {
-		log.Fatal(err)
-	}
-
+func checkBlobSupport(db *sql.DB) {
+	log.Println("checkBlobSupport:")
 	blobStmt, err := db.Prepare("INSERT INTO bar(id, thing) values($1, $2)")
 	if err != nil {
 		log.Fatal(err)
@@ -79,27 +68,80 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("blob select: %s", bres)
+}
 
-	earlierPrepStmt, err := db.Prepare("SELECT id, name FROM foo")
+func checkEmptyQuery(db *sql.DB) {
+	log.Println("checkEmptyQuery:")
+	stmt, err := db.Prepare("SELECT id, name FROM foo")
 	if err != nil {
 		log.Fatal(err)
 	}
 	// querying an empty table shouldn't produce an error
-	rows, err := earlierPrepStmt.Query()
+	rows, err := stmt.Query()
 	if err != nil {
 		log.Fatal(err)
 	}
 	rows.Close()
+}
 
+func checkEmptyQueryWithResults(db *sql.DB) {
+	stmt, err := db.Prepare("SELECT id, name FROM foo")
+	if err != nil {
+		log.Fatal(err)
+	}
+	rows, err := stmt.Query()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id int
+		var name string
+		err := rows.Scan(&id, &name)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("Empty db.Query() got row: %d, %s", id, name)
+	}
+}
+
+func checkErrNoRows(db *sql.DB) {
+	log.Println("checkErrNoRows:")
+	stmt, err := db.Prepare("SELECT id, name FROM foo")
+	if err != nil {
+		log.Fatal(err)
+	}
 	// query row context should return ErrNoRows
 	var a int64
 	var b string
-	err = earlierPrepStmt.QueryRowContext(context.Background()).Scan(&a, &b)
+	err = stmt.QueryRowContext(context.Background()).Scan(&a, &b)
 	if err != sql.ErrNoRows {
 		log.Fatalf("Expected sql.ErrNoRows to QueryRowContext, got %s", err)
 	} else {
 		log.Println("Returns sql.ErrNoRows ok")
 	}
+}
+
+func main() {
+	log.Printf("Opening sqlite3_js driver...")
+	var db *sql.DB
+	var err error
+	if db, err = sql.Open("sqlite3_js", "test.db"); err != nil {
+		log.Fatal(err)
+	}
+
+	// checks multiple queries can go in a single Exec call. We don't support params in this form.
+	_, err = db.Exec("CREATE TABLE bar(id INTEGER, thing BLOB); create table foo(id INTEGER PRIMARY KEY, name string)")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	checkBlobSupport(db)
+
+	checkEmptyQuery(db)
+
+	checkErrNoRows(db)
 
 	res, err := db.Exec("insert into bar values(9001, NULL)")
 	if err != nil {
@@ -172,7 +214,7 @@ func main() {
 	log.Printf("Got first row: %d, %s", id, name)
 	stmt.Close()
 
-	rows, err = db.Query("select * from foo")
+	rows, err := db.Query("select * from foo")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -185,18 +227,7 @@ func main() {
 	}
 	rows.Close()
 
-	rows, err = earlierPrepStmt.Query()
-	if err != nil {
-		log.Fatal(err)
-	}
-	for rows.Next() {
-		err := rows.Scan(&id, &name)
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Printf("Empty db.Query() got row: %d, %s", id, name)
-	}
-	rows.Close()
+	checkEmptyQueryWithResults(db)
 
 	<-c
 }
