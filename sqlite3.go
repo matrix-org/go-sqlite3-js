@@ -173,6 +173,7 @@ func (conn *SqliteJsConn) BeginTx(ctx context.Context, opts driver.TxOptions) (d
 
 func (conn *SqliteJsConn) begin(ctx context.Context) (driver.Tx, error) {
 	if conn.disableTxns {
+		fmt.Println("Ignoring BEGIN, txns disabled")
 		return &SqliteJsTx{c: conn}, nil
 	}
 	if _, err := conn.exec(ctx, "BEGIN", nil); err != nil {
@@ -184,6 +185,7 @@ func (conn *SqliteJsConn) begin(ctx context.Context) (driver.Tx, error) {
 // Commit commits the transaction.
 func (tx *SqliteJsTx) Commit() error {
 	if tx.c.disableTxns {
+		fmt.Println("Ignoring COMMIT, txns disabled")
 		return nil
 	}
 	_, err := tx.c.exec(context.Background(), "COMMIT", nil)
@@ -202,6 +204,7 @@ func (tx *SqliteJsTx) Commit() error {
 // Rollback aborts the transaction.
 func (tx *SqliteJsTx) Rollback() error {
 	if tx.c.disableTxns {
+		fmt.Println("Ignoring ROLLBACK, txns disabled")
 		return nil
 	}
 	_, err := tx.c.exec(context.Background(), "ROLLBACK", nil)
@@ -315,7 +318,7 @@ func (s *SqliteJsStmt) execSync(args []namedValue) (driver.Result, error) {
 
 	jsErr := multiRes.Get("error")
 	if jsErr.Truthy() {
-		return nil, fmt.Errorf("sql.js: %s", jsErr.Get("message").String())
+		return nil, fmt.Errorf("execSync sql.js: %s", jsErr.Get("message").String())
 	}
 
 	// TODO: Kinda sucks each exec is paired with 2 extra bridge calls but we have to do it ASAP else we risk
@@ -376,7 +379,7 @@ func (s *SqliteJsStmt) query(ctx context.Context, args []namedValue) (driver.Row
 	}
 	res := bridge.Call("query", jsArgs...)
 	if res.Get("error").Truthy() {
-		return nil, fmt.Errorf("sql.js: %s", res.Get("error").Get("message").String())
+		return nil, fmt.Errorf("query sql.js: %s", res.Get("error").Get("message").String())
 	}
 
 	return &SqliteJsRows{
