@@ -20,6 +20,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"log"
 
@@ -55,7 +56,8 @@ func checkBlobSupport(db *sql.DB) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = blobStmt.Exec(44, []byte("hello world"))
+	rawBytes := sha256.Sum256([]byte("hello world"))
+	_, err = blobStmt.Exec(44, rawBytes[:])
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -67,7 +69,16 @@ func checkBlobSupport(db *sql.DB) {
 	if err := blobSelectStmt.QueryRow(44).Scan(&bres); err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("blob select: %s", bres)
+
+	if len(bres) != len(rawBytes) {
+		log.Fatalf("Mismatched lengths: got %d want %d", len(bres), len(rawBytes))
+	}
+	for i := range bres {
+		if bres[i] != rawBytes[i] {
+			log.Fatalf("Wrong value at pos %d/%d: got %d want %d", i, len(bres), bres[i], rawBytes[i])
+		}
+	}
+	log.Println("OK: checked ", len(bres), " bytes")
 }
 
 func checkEmptyQuery(db *sql.DB) {
