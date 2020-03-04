@@ -174,13 +174,13 @@ func (conn *SqliteJsConn) BeginTx(ctx context.Context, opts driver.TxOptions) (d
 
 func (conn *SqliteJsConn) begin(ctx context.Context) (driver.Tx, error) {
 	/*
-	if conn.disableTxns {
-		fmt.Println("Ignoring BEGIN, txns disabled")
-		return &SqliteJsTx{c: conn}, nil
-	}
-	if _, err := conn.exec(ctx, "BEGIN", nil); err != nil {
-		return nil, err
-	} */
+		if conn.disableTxns {
+			fmt.Println("Ignoring BEGIN, txns disabled")
+			return &SqliteJsTx{c: conn}, nil
+		}
+		if _, err := conn.exec(ctx, "BEGIN", nil); err != nil {
+			return nil, err
+		} */
 	return &SqliteJsTx{c: conn}, nil
 }
 
@@ -188,33 +188,33 @@ func (conn *SqliteJsConn) begin(ctx context.Context) (driver.Tx, error) {
 func (tx *SqliteJsTx) Commit() error {
 	return nil
 	/*
-	if tx.c.disableTxns {
-		fmt.Println("Ignoring COMMIT, txns disabled")
-		return nil
-	}
-	_, err := tx.c.exec(context.Background(), "COMMIT", nil)
-	if err != nil {
-		// FIXME: ideally should only be called when
-		// && err.(Error).Code == C.SQLITE_BUSY
-		//
-		// sqlite3 will leave the transaction open in this scenario.
-		// However, database/sql considers the transaction complete once we
-		// return from Commit() - we must clean up to honour its semantics.
-		tx.c.exec(context.Background(), "ROLLBACK", nil)
-	}
-	return err */
+		if tx.c.disableTxns {
+			fmt.Println("Ignoring COMMIT, txns disabled")
+			return nil
+		}
+		_, err := tx.c.exec(context.Background(), "COMMIT", nil)
+		if err != nil {
+			// FIXME: ideally should only be called when
+			// && err.(Error).Code == C.SQLITE_BUSY
+			//
+			// sqlite3 will leave the transaction open in this scenario.
+			// However, database/sql considers the transaction complete once we
+			// return from Commit() - we must clean up to honour its semantics.
+			tx.c.exec(context.Background(), "ROLLBACK", nil)
+		}
+		return err */
 }
 
 // Rollback aborts the transaction.
 func (tx *SqliteJsTx) Rollback() error {
 	return nil
 	/*
-	if tx.c.disableTxns {
-		fmt.Println("Ignoring ROLLBACK, txns disabled")
-		return nil
-	}
-	_, err := tx.c.exec(context.Background(), "ROLLBACK", nil)
-	return err */
+		if tx.c.disableTxns {
+			fmt.Println("Ignoring ROLLBACK, txns disabled")
+			return nil
+		}
+		_, err := tx.c.exec(context.Background(), "ROLLBACK", nil)
+		return err */
 }
 
 // Statements
@@ -225,10 +225,6 @@ func (tx *SqliteJsTx) Rollback() error {
 // needed.
 func (conn *SqliteJsConn) Prepare(query string) (driver.Stmt, error) {
 	bridge := js.Global().Get("_go_sqlite_bridge")
-	fmt.Println("Conn.Prepare " + query)
-	if query == "BEGIN" || query == "COMMIT" || query == "ROLLBACK" {
-	debug.PrintStack()
-	}
 	jsStmt := bridge.Call("prepare", conn.JsDb, query)
 	return &SqliteJsStmt{
 		c:  conn,
