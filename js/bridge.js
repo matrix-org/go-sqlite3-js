@@ -37,7 +37,7 @@ export function init(config) {
             },
             prepare: (db, query) => {
                 const stmt = db.prepare(query)
-                console.debug(`db.prepare: ${stmt.jb} => ${query}`)
+                // console.debug(`db.prepare: ${stmt.jb} => ${query}`)
                 return stmt
             },
             execMany: (db, query) => {
@@ -46,7 +46,7 @@ export function init(config) {
                     error: null,
                 }
                 try {
-                    console.debug(`db.exec: ${query}`)
+                    // console.debug(`db.exec: ${query}`)
                     res.result = db.exec(query);
                 } catch (err) {
                     res.error = err;
@@ -54,7 +54,7 @@ export function init(config) {
                 return res;
             },
             exec: (stmt, ...args) => {
-                console.debug(`stmt.run: ${stmt.jb} => '${args}' ${typeof args}`)
+                // console.debug(`stmt.run: ${stmt.jb} => '${args}' ${typeof args}`)
                 let retres = null;
                 let reterr = null;
                 try {
@@ -92,7 +92,7 @@ export function init(config) {
                 };
             },
             query: (stmt, ...args) => {
-                console.debug(`stmt.bind: ${stmt.jb} => '${args}'`)
+                // console.debug(`stmt.bind: ${stmt.jb} => '${args}'`)
                 const ok = stmt.bind(args)
                 if (!ok) { // bind failed
                     return {
@@ -101,7 +101,7 @@ export function init(config) {
                     }
                 }
                 // FIXME: storing random state on stmt is horrific
-                console.debug(`stmt.step: ${stmt.jb}`)
+                // console.debug(`stmt.step: ${stmt.jb}`)
                 stmt._has_next = stmt.step()
                 return {
                     result: stmt._has_next,
@@ -109,15 +109,15 @@ export function init(config) {
                 }
             },
             columns: (stmt) => {
-                console.debug(`stmt.getColumnNames(): ${stmt.jb} => '${stmt.getColumnNames()}'`)
+                // console.debug(`stmt.getColumnNames(): ${stmt.jb} => '${stmt.getColumnNames()}'`)
                 return stmt.getColumnNames()
             },
             next: (stmt) => {
                 if (stmt._has_next) {
-                    console.debug(`next => stmt.get: ${stmt.jb}`)
+                    // console.debug(`next => stmt.get: ${stmt.jb}`)
                     const row = stmt.get()
                     // FIXME: ugly hack - surely we shouldn't have to monkey-patch this
-                    console.debug(`next => stmt.step: ${stmt.jb}`)
+                    // console.debug(`next => stmt.step: ${stmt.jb}`)
                     stmt._has_next = stmt.step()
                     return row
                 }
@@ -126,11 +126,11 @@ export function init(config) {
                 }
             },
             close: (stmt) => {
-                console.debug(`stmt.free: ${stmt.jb}`)
+                // console.debug(`stmt.free: ${stmt.jb}`)
                 return stmt.free()
             },
             reset: (stmt) => {
-                console.debug(`stmt.reset: ${stmt.jb}`)
+                // console.debug(`stmt.reset: ${stmt.jb}`)
                 return stmt.reset()
             }
         }
