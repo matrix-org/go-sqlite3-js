@@ -29,7 +29,7 @@ var i = 1
 func newDB(t *testing.T, schema string) *sql.DB {
 	var db *sql.DB
 	var err error
-	i += 1
+	i++
 	if db, err = sql.Open("sqlite3_js", fmt.Sprintf("test-%d.db", i)); err != nil {
 		t.Fatalf("cannot open test.db: %s", err)
 	}
@@ -40,7 +40,7 @@ func newDB(t *testing.T, schema string) *sql.DB {
 	return db
 }
 
-func assertStored(t *testing.T, db *sql.DB, query string, wants []string) {
+func assertStored(t *testing.T, db *sql.DB, query string, wants []string) { //nolint:unparam
 	rows, err := db.Query(query)
 	if err != nil {
 		t.Fatalf("assertStored: cannot run query: %s", err)
@@ -319,7 +319,9 @@ func TestStarSelectSingle(t *testing.T) {
 	}
 	var id int
 	var name string
-	stmt.QueryRow().Scan(&id, &name)
+	if err = stmt.QueryRow().Scan(&id, &name); err != nil {
+		t.Fatalf("Failed to query row: %s", err)
+	}
 	stmt.Close()
 	if id != wantID {
 		t.Errorf("ID: got %d want %d", id, wantID)
