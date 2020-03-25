@@ -1,4 +1,4 @@
-package sqlite3_js
+package sqlite3_js //nolint:golint
 
 import (
 	"context"
@@ -217,7 +217,7 @@ func (s *SqliteJsStmt) Close() error {
 	s.closed = true
 
 	res := s.js.Call("free")
-	if res.Bool() == false {
+	if !res.Bool() {
 		return fmt.Errorf("couldn't close stmt")
 	}
 	return nil

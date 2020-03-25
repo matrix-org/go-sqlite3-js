@@ -1,4 +1,4 @@
-package sqlite3_js
+package sqlite3_js //nolint:golint
 
 import (
 	"context"
@@ -100,7 +100,7 @@ func (conn *SqliteJsConn) BeginTx(ctx context.Context, opts driver.TxOptions) (d
 	return conn.begin(ctx)
 }
 
-func (conn *SqliteJsConn) begin(ctx context.Context) (driver.Tx, error) {
+func (conn *SqliteJsConn) begin(ctx context.Context) (driver.Tx, error) { //nolint:unparam
 	/*
 		if conn.disableTxns {
 			fmt.Println("Ignoring BEGIN, txns disabled")

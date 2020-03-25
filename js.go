@@ -1,4 +1,4 @@
-package sqlite3_js
+package sqlite3_js //nolint:golint
 
 import (
 	"fmt"

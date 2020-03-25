@@ -15,7 +15,7 @@
 
 // Derived from https://github.com/mattn/go-sqlite3
 
-package sqlite3_js
+package sqlite3_js //nolint:golint
 
 import (
 	"context"
@@ -204,7 +204,7 @@ func (r *SqliteJsRows) nextSyncLocked(dest []driver.Value) error {
 			if jsVal.Get("byteLength").Truthy() {
 				uint8slice := make([]uint8, jsVal.Get("byteLength").Int())
 				js.CopyBytesToGo(uint8slice, jsVal)
-				dest[i] = []byte(uint8slice)
+				dest[i] = uint8slice
 			} else {
 				log.Fatal("Don't know how to handle Objects yet")
 			}
