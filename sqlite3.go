@@ -29,8 +29,6 @@ import (
 	"syscall/js"
 )
 
-// import "runtime/debug"
-
 func init() {
 	sql.Register("sqlite3_js", &SqliteJsDriver{})
 	dbMap := js.Global().Get("Map").New()

@@ -1,4 +1,3 @@
-// -*- coding: utf-8 -*-
 // Copyright 2020 The Matrix.org Foundation C.I.C.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,25 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
-
-// GOOS=js GOARCH=wasm go build -o main.wasm  ./tests/main.go
-// cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" .
+package sqlite3_js_test
 
 import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
 	"log"
+	"testing"
 
 	_ "github.com/matrix-org/go-sqlite3-js"
 )
-
-var c chan struct{}
-
-func init() {
-	c = make(chan struct{})
-}
 
 func printResultMetadata(msg string, res sql.Result) {
 	if res == nil {
@@ -96,7 +87,7 @@ func checkEmptyQuery(db *sql.DB) {
 }
 
 func checkEmptyQueryWithResults(db *sql.DB) {
-	stmt, err := db.Prepare("SELECTd id, name FROM foo")
+	stmt, err := db.Prepare("SELECT id, name FROM foo")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -170,7 +161,46 @@ func checkMultipleConnSupport() {
 	}
 }
 
-func main() {
+func TestBlobSupport(t *testing.T) {
+	var db *sql.DB
+	var err error
+	if db, err = sql.Open("sqlite3_js", "test.db"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec("CREATE TABLE bar(id INTEGER, thing BLOB); create table foo(id INTEGER PRIMARY KEY, name string)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	blobStmt, err := db.Prepare("INSERT INTO bar(id, thing) values($1, $2)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawBytes := sha256.Sum256([]byte("hello world"))
+	_, err = blobStmt.Exec(44, rawBytes[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	blobSelectStmt, err := db.Prepare("SELECT thing FROM bar WHERE id = $1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bres []byte
+	if err := blobSelectStmt.QueryRow(44).Scan(&bres); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(bres) != len(rawBytes) {
+		t.Fatalf("Mismatched lengths: got %d want %d", len(bres), len(rawBytes))
+	}
+	for i := range bres {
+		if bres[i] != rawBytes[i] {
+			t.Fatalf("Wrong value at pos %d/%d: got %d want %d", i, len(bres), bres[i], rawBytes[i])
+		}
+	}
+	t.Log("OK: checked ", len(bres), " bytes")
+}
+
+func mainx() {
 	log.Printf("Opening sqlite3_js driver...")
 	var db *sql.DB
 	var err error
@@ -281,6 +311,4 @@ func main() {
 	checkEmptyQueryWithResults(db)
 
 	checkMultipleConnSupport()
-
-	<-c
 }
