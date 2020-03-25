@@ -142,7 +142,7 @@ func checkMultipleConnSupport() {
 	var db *sql.DB
 	var err error
 	// Dendrite only does this once, then calls a bunch of stuff
-	if db, err = sql.Open("sqlite3_js", "file:test2.db?txns=false"); err != nil {
+	if db, err = sql.Open("sqlite3_js", "file:test2.db"); err != nil {
 		log.Fatal(err)
 	}
 
@@ -182,6 +182,10 @@ func main() {
 	_, err = db.Exec("CREATE TABLE bar(id INTEGER, thing BLOB); create table foo(id INTEGER PRIMARY KEY, name string)")
 	if err != nil {
 		log.Fatal(err)
+	}
+	_, err = db.Exec("CREATE TABLE bar2(id INTEGER, thing BLOB); create table foo(id INTEGER PRIMARY KEY, name string)")
+	if err == nil {
+		log.Fatal("Expected error overwriting table 'foo'")
 	}
 
 	checkBlobSupport(db)

@@ -4,7 +4,7 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 module.exports = {
     mode: 'development',
     entry: {
-        'app': './js/bridge.js',
+        'app': './sql.js',
         'sql-wasm': './node_modules/sql.js/dist/sql-wasm.wasm',
     },
     devtool: 'inline-source-map',

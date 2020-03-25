@@ -20,7 +20,9 @@ limitations under the License.
         <script src="wasm_exec.js"></script>
         <script src="<%= htmlWebpackPlugin.files.chunks['app'].entry %>"></script>
         <script>
+            // Load sql.js
             GoSqliteJs.init().then(()=>{
+                // Run tests
                 const go = new Go()
                 WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
                     go.run(result.instance)

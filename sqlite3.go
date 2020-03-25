@@ -25,7 +25,6 @@ import (
 	"io"
 	"log"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall/js"
 )
@@ -34,6 +33,12 @@ import (
 
 func init() {
 	sql.Register("sqlite3_js", &SqliteJsDriver{})
+	dbMap := js.Global().Get("Map").New()
+	jsEnsureGlobal(globalSQLDBs, &dbMap)
+	exists := jsEnsureGlobal(globalSQLJS, nil)
+	if !exists {
+		panic(globalSQLJS + " must be set a global variable in JS")
+	}
 }
 
 // SqliteJsDriver implements driver.Driver.
@@ -41,27 +46,9 @@ type SqliteJsDriver struct {
 	ConnectHook func(*SqliteJsConn) error
 }
 
-// SqliteJsConn implements driver.Conn.
-type SqliteJsConn struct {
-	JsDb js.Value
-	mu   *sync.Mutex
-	// set to true to disable BEGIN/COMMIT/ROLLBACK -- YOLO!
-	// Set via the string '?txns=false' at the end of the DSN in Open
-	disableTxns bool
-}
-
 // SqliteJsTx implements driver.Tx.
 type SqliteJsTx struct {
 	c *SqliteJsConn
-}
-
-// SqliteJsStmt implements driver.Stmt.
-type SqliteJsStmt struct {
-	c      *SqliteJsConn
-	js     js.Value
-	mu     sync.Mutex
-	closed bool
-	cls    bool // wild guess: connection level statement?
 }
 
 // SqliteJsResult implements sql.Result.
@@ -82,105 +69,20 @@ type SqliteJsRows struct {
 	ctx    context.Context // no better alternative to pass context into Next() method
 }
 
-// Database conns
-func (d *SqliteJsDriver) Open(dsn string) (driver.Conn, error) {
-	// debug.PrintStack()
-	fmt.Println("Open -> " + dsn)
-	disableTxns := strings.HasSuffix(dsn, "?txns=false")
-	if disableTxns {
-		dsn = strings.TrimSuffix(dsn, "?txns=false")
+// Open a database "connection" to a SQLite database.
+func (d *SqliteJsDriver) Open(dsn string) (conn driver.Conn, err error) {
+	defer protect("Open", func(e error) { err = e })
+	dbMap := js.Global().Get(globalSQLDBs)
+	jsDb := dbMap.Call("get", dsn)
+	if !jsDb.Truthy() {
+		jsDb = js.Global().Get(globalSQLJS).Get("Database").New()
+		dbMap.Call("set", dsn, jsDb)
 	}
-	bridge := js.Global().Get("_go_sqlite_bridge")
-	jsDb := bridge.Call("open", dsn)
+	fmt.Println("Open ->", dsn, "err=", err)
 	return &SqliteJsConn{
-		JsDb:        jsDb,
-		mu:          &sync.Mutex{},
-		disableTxns: disableTxns,
+		JsDb: jsDb,
+		mu:   &sync.Mutex{},
 	}, nil
-}
-
-// Close returns the connection to the connection pool. All operations after a
-// Close will return with ErrConnDone. Close is safe to call concurrently with
-// other operations and will block until all other operations finish. It may be
-// useful to first cancel any used context and then call close directly after.
-func (conn SqliteJsConn) Close() error {
-	// TODO
-	return nil
-}
-
-func (conn *SqliteJsConn) Exec(query string, args []driver.Value) (driver.Result, error) {
-	if strings.Contains(query, ";") {
-		if len(args) != 0 {
-			return nil, fmt.Errorf("cannot exec multiple statements with placeholders, query: %s nargs=%d", query, len(args))
-		}
-		bridge := js.Global().Get("_go_sqlite_bridge")
-		jsQueryRes := bridge.Call("execMany", conn.JsDb, query)
-		jsErr := jsQueryRes.Get("error")
-		if jsErr.Truthy() {
-			return nil, fmt.Errorf("sql.js: %s", jsErr.Get("message").String())
-		}
-		return &SqliteJsResult{
-			js:      jsQueryRes.Get("result"),
-			changes: 0,
-			id:      0,
-		}, nil
-	}
-
-	list := make([]namedValue, len(args))
-	for i, v := range args {
-		list[i] = namedValue{
-			Ordinal: i + 1,
-			Value:   v,
-		}
-	}
-	return conn.exec(context.Background(), query, list)
-}
-
-func (conn *SqliteJsConn) exec(ctx context.Context, query string, args []namedValue) (driver.Result, error) {
-	// FIXME: we removed tbe ability to handle 'tails' - is this a problem?
-	s, err := conn.Prepare(query)
-	if err != nil {
-		return nil, err
-	}
-	var res driver.Result
-	res, err = s.(*SqliteJsStmt).exec(ctx, args)
-	s.Close()
-	return res, err
-}
-
-// Transactions
-
-// Begin starts a transaction. The default isolation level is dependent on the driver.
-func (conn *SqliteJsConn) Begin() (driver.Tx, error) {
-	return conn.begin(context.Background())
-}
-
-// BeginTx starts and returns a new transaction.
-// If the context is canceled by the user the sql package will
-// call Tx.Rollback before discarding and closing the connection.
-//
-// This must check opts.Isolation to determine if there is a set
-// isolation level. If the driver does not support a non-default
-// level and one is set or if there is a non-default isolation level
-// that is not supported, an error must be returned.
-//
-// This must also check opts.ReadOnly to determine if the read-only
-// value is true to either set the read-only transaction property if supported
-// or return an error if it is not supported.
-func (conn *SqliteJsConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
-	return conn.begin(ctx)
-}
-
-func (conn *SqliteJsConn) begin(ctx context.Context) (driver.Tx, error) {
-	/*
-		if conn.disableTxns {
-			fmt.Println("Ignoring BEGIN, txns disabled")
-			return &SqliteJsTx{c: conn}, nil
-		}
-		if _, err := conn.exec(ctx, "BEGIN", nil); err != nil {
-			return nil, err
-		} */
-	return &SqliteJsTx{c: conn}, nil
 }
 
 // Commit commits the transaction.
@@ -216,214 +118,6 @@ func (tx *SqliteJsTx) Rollback() error {
 		return err */
 }
 
-// Statements
-
-// Prepare creates a prepared statement for later queries or executions. Multiple
-// queries or executions may be run concurrently from the returned statement. The
-// caller must call the statement's Close method when the statement is no longer
-// needed.
-func (conn *SqliteJsConn) Prepare(query string) (driver.Stmt, error) {
-	bridge := js.Global().Get("_go_sqlite_bridge")
-	jsStmt := bridge.Call("prepare", conn.JsDb, query)
-	return &SqliteJsStmt{
-		c:  conn,
-		js: jsStmt,
-	}, nil
-}
-
-type namedValue struct {
-	Name    string
-	Ordinal int
-	Value   driver.Value
-}
-
-// Exec executes a prepared statement with the given arguments and returns a
-// Result summarizing the effect of the statement.
-func (s *SqliteJsStmt) Exec(args []driver.Value) (driver.Result, error) {
-	list := make([]namedValue, len(args))
-	for i, v := range args {
-		list[i] = namedValue{
-			Ordinal: i + 1,
-			Value:   v,
-		}
-	}
-	return s.exec(context.Background(), list)
-}
-
-// ExecContext executes a query that doesn't return rows, such
-// as an INSERT or UPDATE.
-//
-// ExecContext must honor the context timeout and return when it is canceled.
-func (s *SqliteJsStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
-	list := make([]namedValue, len(args))
-	for i, nv := range args {
-		list[i] = namedValue(nv)
-	}
-	return s.exec(ctx, list)
-}
-
-// exec executes a query that doesn't return rows. Attempts to honor context timeout.
-func (s *SqliteJsStmt) exec(ctx context.Context, args []namedValue) (driver.Result, error) {
-	if ctx.Done() == nil {
-		return s.execSync(args)
-	}
-
-	type result struct {
-		r   driver.Result
-		err error
-	}
-	resultCh := make(chan result)
-	go func() {
-		defer func() {
-			if perr := recover(); perr != nil {
-				fmt.Printf("SqliteJsStmt.exec panicked! nargs=%d err=%s", len(args), perr)
-				resultCh <- result{nil, fmt.Errorf("SqliteJsStmt.exec panicked! nargs=%d err=%s", len(args), perr)}
-			}
-		}()
-		r, err := s.execSync(args)
-		resultCh <- result{r, err}
-	}()
-	select {
-	case rv := <-resultCh:
-		return rv.r, rv.err
-	case <-ctx.Done():
-		select {
-		case <-resultCh: // no need to interrupt
-		default:
-			// FIXME: find a way to actually interrupt the connection
-			// this is still racy and can be no-op if executed between sqlite3_* calls in execSync.
-			// C.sqlite3_interrupt(s.c.db)
-			<-resultCh // ensure goroutine completed
-		}
-		return nil, ctx.Err()
-	}
-}
-
-func (s *SqliteJsStmt) execSync(args []namedValue) (driver.Result, error) {
-	// We're going to issue a bunch of bridge calls, some of which (last rowid)
-	// are NOT statement-level scoped, but connection-level scoped, so we cannot just
-	// lock the statement mutex we have already, otherwise multiple goroutines may
-	// exec in this function, causing the last insert rowid to be wrong.
-	s.c.mu.Lock()
-	defer s.c.mu.Unlock()
-
-	bridge := js.Global().Get("_go_sqlite_bridge")
-	jsArgs := make([]interface{}, len(args)+1)
-	jsArgs[0] = s.js
-	for i, v := range args {
-		if bval, ok := v.Value.([]byte); ok {
-			dst := js.Global().Get("Uint8Array").New(len(bval))
-			js.CopyBytesToJS(dst, bval)
-			jsArgs[i+1] = dst
-		} else {
-			jsArgs[i+1] = js.ValueOf(v.Value)
-		}
-	}
-	multiRes := bridge.Call("exec", jsArgs...)
-
-	jsErr := multiRes.Get("error")
-	if jsErr.Truthy() {
-		return nil, fmt.Errorf("execSync sql.js: %s", jsErr.Get("message").String())
-	}
-
-	// TODO: Kinda sucks each exec is paired with 2 extra bridge calls but we have to do it ASAP else we risk
-	// getting out of sync with subsequent inserts.
-	rowsModified := bridge.Call("getRowsModified", s.c.JsDb)
-
-	rowidRes := bridge.Call("lastInsertRowid", s.c.JsDb) // this defaults to the most recent table hence this works
-	jsErr = rowidRes.Get("error")
-	if jsErr.Truthy() {
-		return nil, fmt.Errorf("sql.js: error getting rowid: %s", jsErr.Get("message").String())
-	}
-	return &SqliteJsResult{
-		js:      multiRes.Get("result"),
-		changes: int64(rowsModified.Int()),
-		id:      int64(rowidRes.Get("result").Int()),
-	}, nil
-}
-
-// Query executes a query that may return rows, such as a
-// SELECT.
-//
-// Deprecated: Drivers should implement StmtQueryContext instead (or additionally).
-func (s *SqliteJsStmt) Query(args []driver.Value) (driver.Rows, error) {
-	list := make([]namedValue, len(args))
-	for i, v := range args {
-		list[i] = namedValue{
-			Ordinal: i + 1,
-			Value:   v,
-		}
-	}
-	return s.query(context.Background(), list)
-}
-
-// QueryContext executes a query that may return rows, such as a
-// SELECT.
-//
-// QueryContext must honor the context timeout and return when it is canceled.
-func (s *SqliteJsStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
-	list := make([]namedValue, len(args))
-	for i, nv := range args {
-		list[i] = namedValue(nv)
-	}
-	return s.query(ctx, list)
-}
-
-func (s *SqliteJsStmt) query(ctx context.Context, args []namedValue) (driver.Rows, error) {
-	bridge := js.Global().Get("_go_sqlite_bridge")
-	jsArgs := make([]interface{}, len(args)+1)
-	jsArgs[0] = s.js
-	for i, v := range args {
-		if bval, ok := v.Value.([]byte); ok {
-			dst := js.Global().Get("Uint8Array").New(len(bval))
-			js.CopyBytesToJS(dst, bval)
-			jsArgs[i+1] = dst
-		} else {
-			jsArgs[i+1] = js.ValueOf(v.Value)
-		}
-	}
-	res := bridge.Call("query", jsArgs...)
-	if res.Get("error").Truthy() {
-		return nil, fmt.Errorf("query sql.js: %s", res.Get("error").Get("message").String())
-	}
-
-	return &SqliteJsRows{
-		s:   s,
-		cls: s.cls, // FIXME: we never set s.cls, as we haven't implemented conn.Query(), which would set it
-		ctx: ctx,
-	}, nil
-}
-
-// NumInput returns the number of placeholder parameters.
-//
-// If NumInput returns >= 0, the sql package will sanity check
-// argument counts from callers and return errors to the caller
-// before the statement's Exec or Query methods are called.
-//
-// NumInput may also return -1, if the driver doesn't know
-// its number of placeholders. In that case, the sql package
-// will not sanity check Exec or Query argument counts.
-func (s *SqliteJsStmt) NumInput() int {
-	return -1
-}
-
-// Close closes the statement.
-func (s *SqliteJsStmt) Close() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.closed {
-		return nil
-	}
-	s.closed = true
-
-	bridge := js.Global().Get("_go_sqlite_bridge")
-	res := bridge.Call("close", s.js)
-	if res.Bool() == false {
-		return fmt.Errorf("couldn't close stmt")
-	}
-	return nil
-}
-
 // Rows
 
 // Columns returns the names of the columns. The number of
@@ -431,8 +125,7 @@ func (s *SqliteJsStmt) Close() error {
 // slice. If a particular column name isn't known, an empty
 // string should be returned for that entry.
 func (r *SqliteJsRows) Columns() []string {
-	bridge := js.Global().Get("_go_sqlite_bridge")
-	res := bridge.Call("columns", r.s.js)
+	res := r.s.js.Call("getColumnNames")
 	cols := make([]string, res.Length())
 	for i := 0; i < res.Length(); i++ {
 		cols[i] = res.Get(strconv.Itoa(i)).String()
@@ -488,11 +181,11 @@ func (r *SqliteJsRows) Next(dest []driver.Value) error {
 
 // nextSyncLocked moves cursor to next; must be called with locked mutex.
 func (r *SqliteJsRows) nextSyncLocked(dest []driver.Value) error {
-	bridge := js.Global().Get("_go_sqlite_bridge")
-	res := bridge.Call("next", r.s.js)
-	if res.Type() == js.TypeNull {
+	rr := r.s.Next()
+	if rr == nil {
 		return io.EOF
 	}
+	res := *rr
 	for i := 0; i < res.Length(); i++ {
 		jsVal := res.Get(strconv.Itoa(i))
 		switch t := jsVal.Type(); t {
@@ -535,8 +228,7 @@ func (r *SqliteJsRows) Close() error {
 		return r.s.Close()
 	}
 
-	bridge := js.Global().Get("_go_sqlite_bridge")
-	bridge.Call("reset", r.s.js)
+	r.s.js.Call("reset")
 	return nil
 }
 
