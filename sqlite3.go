@@ -25,12 +25,13 @@ import (
 	"io"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall/js"
 )
 
 func init() {
-	sql.Register("sqlite3_js", &SqliteJsDriver{})
+	sql.Register("sqlite3", &SqliteJsDriver{})
 	dbMap := js.Global().Get("Map").New()
 	jsEnsureGlobal(globalSQLDBs, &dbMap)
 	exists := jsEnsureGlobal(globalSQLJS, nil)
@@ -69,6 +70,7 @@ type SqliteJsRows struct {
 
 // Open a database "connection" to a SQLite database.
 func (d *SqliteJsDriver) Open(dsn string) (conn driver.Conn, err error) {
+	dsn = strings.TrimPrefix(dsn, "file:")
 	defer protect("Open", func(e error) { err = e })
 	dbMap := js.Global().Get(globalSQLDBs)
 	jsDb := dbMap.Call("get", dsn)
