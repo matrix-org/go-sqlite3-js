@@ -38,6 +38,7 @@ func (conn SqliteJsConn) Close() error {
 
 func (conn *SqliteJsConn) Exec(query string, args []driver.Value) (result driver.Result, err error) {
 	defer protect("Exec", func(e error) { err = e })
+	query = strings.TrimRight(query, ";")
 	if strings.Contains(query, ";") {
 		if len(args) != 0 {
 			return nil, fmt.Errorf("cannot exec multiple statements with placeholders, query: %s nargs=%d", query, len(args))
