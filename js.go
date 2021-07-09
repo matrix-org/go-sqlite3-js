@@ -2,6 +2,7 @@ package sqlite3_js //nolint:golint
 
 import (
 	"fmt"
+	"os"
 	"runtime/debug"
 	"syscall/js"
 )
@@ -48,6 +49,7 @@ func jsTryCatch(fn func() js.Value) (val js.Value, err error) {
 func protect(name string, setError func(error)) {
 	err := recover()
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s panicked: %s\n", name, err)
 		debug.PrintStack()
 		setError(fmt.Errorf("%s panicked: %s", name, err))
 	}
