@@ -5,6 +5,6 @@
   "main": "js/index.js",
   "license": "Apache 2.0",
   "dependencies": {
-    "sql.js": "^1.5.0"
+    "sql.js": "^1.6.2"
   }
 }
